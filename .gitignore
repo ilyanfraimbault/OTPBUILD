@@ -3,10 +3,10 @@ obj/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
-/game.json
-/perks.json
+/*.json
 /Program.cs
 .idea
 /OTPBUILD.csproj
 /OTPBUILD.sln
 /OTPBUILD.sln.DotSettings.user
+/script_generation_tables.sql
