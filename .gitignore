@@ -1,0 +1,12 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+/game.json
+/perks.json
+/Program.cs
+.idea
+/OTPBUILD.csproj
+/OTPBUILD.sln
+/OTPBUILD.sln.DotSettings.user
