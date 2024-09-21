@@ -37,7 +37,8 @@ public class GameParticipant
             participant.Item0, participant.Item1, participant.Item2, participant.Item3, participant.Item4,
             participant.Item5, participant.Item6
         ];
-        SpellsCasts = [participant.Spell1Casts, participant.Spell2Casts, participant.Spell3Casts, participant.Spell4Casts];
+        SpellsCasts =
+            [participant.Spell1Casts, participant.Spell2Casts, participant.Spell3Casts, participant.Spell4Casts];
         SummonerSpells = (participant.Summoner1Id, participant.Summoner2Id);
         Perks = participant.Perks;
         TeamPosition = participant.TeamPosition;
@@ -46,6 +47,28 @@ public class GameParticipant
         SummonerId = participant.SummonerId;
         SummonerLevel = participant.SummonerLevel;
         Puuid = participant.Puuid;
+    }
+
+    public GameParticipant(
+        string summonerName, string summonerId, int summonerLevel, string puuid, Champion champion, Team teamId,
+        string teamPosition, int kills, int deaths, int assists, List<int> items, List<int> spellsCasts,
+        (int, int) summonerSpells, Perks perks
+        )
+    {
+        SummonerName = summonerName;
+        SummonerId = summonerId;
+        SummonerLevel = summonerLevel;
+        Puuid = puuid;
+        Champion = champion;
+        TeamId = teamId;
+        TeamPosition = teamPosition;
+        Kills = kills;
+        Deaths = deaths;
+        Assists = assists;
+        Items = items;
+        SpellsCasts = spellsCasts;
+        SummonerSpells = summonerSpells;
+        Perks = perks;
     }
 
     public override string ToString()
