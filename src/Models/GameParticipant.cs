@@ -10,6 +10,7 @@ public class GameParticipant
     public string SummonerName { get; }
     public string SummonerId { get; }
     public int SummonerLevel { get; }
+    public string Puuid { get; }
 
     public Champion Champion { get; }
     public Team TeamId { get; }
@@ -37,13 +38,14 @@ public class GameParticipant
             participant.Item5, participant.Item6
         ];
         SpellsCasts = [participant.Spell1Casts, participant.Spell2Casts, participant.Spell3Casts, participant.Spell4Casts];
-        SummonerSpells = (participant.Summoner1Casts, participant.Summoner2Casts);
+        SummonerSpells = (participant.Summoner1Id, participant.Summoner2Id);
         Perks = participant.Perks;
         TeamPosition = participant.TeamPosition;
 
         SummonerName = participant.SummonerName;
         SummonerId = participant.SummonerId;
         SummonerLevel = participant.SummonerLevel;
+        Puuid = participant.Puuid;
     }
 
     public override string ToString()
