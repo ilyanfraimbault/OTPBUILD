@@ -34,6 +34,22 @@ public class Game
         Participants = match.Info.Participants.Select(participant => new GameParticipant(participant)).ToList();
     }
 
+    public Game(
+        long gameDuration, long gameStartTimestamp, long gameId, string gameVersion, GameType gameType, string matchId,
+        string platformId, Team winner, List<GameParticipant> participants
+        )
+    {
+        GameDuration = gameDuration;
+        GameStartTimestamp = gameStartTimestamp;
+        GameId = gameId;
+        GameVersion = gameVersion;
+        GameType = gameType;
+        MatchId = matchId;
+        PlatformId = platformId;
+        Winner = winner;
+        Participants = participants;
+    }
+
     public override string ToString()
     {
         var options = new JsonSerializerOptions { WriteIndented = true };
