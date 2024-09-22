@@ -35,8 +35,17 @@ public class DatabaseService
         command.Parameters.AddWithValue("@PlatformId", game.PlatformId);
         command.Parameters.AddWithValue("@Winner", game.Winner);
         command.Parameters.AddWithValue("@MatchId", game.MatchId);
+        int result;
+        try
+        {
+            result = command.ExecuteNonQuery();
+        }
+        catch (MySqlException e)
+        {
+            return -1;
+        }
 
-        var result = command.ExecuteNonQuery();
+        if (result <= 0) return result;
 
         foreach (var participant in game.Participants)
         {
