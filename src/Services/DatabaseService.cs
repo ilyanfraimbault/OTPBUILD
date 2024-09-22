@@ -1,8 +1,10 @@
+using Camille.Enums;
 using Camille.RiotGames.MatchV5;
 using Camille.RiotGames.SummonerV4;
 using MySql.Data.MySqlClient;
 using OTPBUILD.Configurations;
 using OTPBUILD.Models;
+using Team = Camille.RiotGames.Enums.Team;
 
 namespace OTPBUILD.Services;
 
@@ -65,7 +67,7 @@ public class DatabaseService
 
         return summonerCommand.ExecuteNonQuery();
     }
-    
+
     private int InsertParticipant(GameParticipant participant, Game game)
     {
         var perksId = InsertPerks(participant.Perks);
@@ -76,10 +78,10 @@ public class DatabaseService
         connection.Open();
 
         var participantQuery =
-                "INSERT INTO Participants " +
-                "VALUES (@GameId, @SummonerPuuid, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
-                "@Item0, @Item1, @Item2, @Item3, @Item4, @Item5, @Item6, " +
-                "@SpellCast1, @SpellCast2, @SpellCast3, @SpellCast4, @SummonerSpell1, @SummonerSpell2, @Perks, @TeamPosition)";
+            "INSERT INTO Participants " +
+            "VALUES (@GameId, @SummonerPuuid, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
+            "@Item0, @Item1, @Item2, @Item3, @Item4, @Item5, @Item6, " +
+            "@SpellCast1, @SpellCast2, @SpellCast3, @SpellCast4, @SummonerSpell1, @SummonerSpell2, @Perks, @TeamPosition)";
         using var participantCommand = new MySqlCommand(participantQuery, connection);
         participantCommand.Parameters.AddWithValue("@GameId", game.GameId);
         participantCommand.Parameters.AddWithValue("@SummonerPuuid", participant.Puuid);
@@ -129,7 +131,7 @@ public class DatabaseService
         connection.Open();
 
         var styleSelectionQuery = "INSERT INTO StyleSelection (perk, var1, var2, var3) " +
-                                      "VALUES (@perk, @var1, @var2, @var3)";
+                                  "VALUES (@perk, @var1, @var2, @var3)";
         using var styleSelectionCommand = new MySqlCommand(styleSelectionQuery, connection);
         styleSelectionCommand.Parameters.AddWithValue("@perk", styleSelection.Perk);
         styleSelectionCommand.Parameters.AddWithValue("@var1", styleSelection.Var1);
@@ -153,8 +155,8 @@ public class DatabaseService
         connection.Open();
 
         var styleQuery =
-                "INSERT INTO PerksStyle (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4) " +
-                "VALUES (@description, @style, @styleSelection1, @styleSelection2, @styleSelection3, @styleSelection4)";
+            "INSERT INTO PerksStyle (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4) " +
+            "VALUES (@description, @style, @styleSelection1, @styleSelection2, @styleSelection3, @styleSelection4)";
 
         using var styleCommand = new MySqlCommand(styleQuery, connection);
         styleCommand.Parameters.AddWithValue("@style", style.Style);
@@ -179,7 +181,7 @@ public class DatabaseService
         connection.Open();
 
         var perksQuery =
-                "INSERT INTO Perks (statPerks, primaryStyle, secondaryStyle) VALUES (@statPerks, @primaryStyle, @secondaryStyle)";
+            "INSERT INTO Perks (statPerks, primaryStyle, secondaryStyle) VALUES (@statPerks, @primaryStyle, @secondaryStyle)";
         using var perksCommand = new MySqlCommand(perksQuery, connection);
         perksCommand.Parameters.AddWithValue("@statPerks", statPerksId);
         perksCommand.Parameters.AddWithValue("@primaryStyle", primaryStyleId);
@@ -187,5 +189,133 @@ public class DatabaseService
 
         perksCommand.ExecuteNonQuery();
         return (int)perksCommand.LastInsertedId;
+    }
+
+    public Game? GetGame(long gameId)
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "CALL GetGame(@GameId)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GameId", gameId);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.HasRows) return null;
+        Game? game = null;
+        while (reader.Read())
+        {
+            game ??= new Game(
+                reader.GetInt32("GameDuration"),
+                reader.GetInt64("GameStartTimestamp"),
+                reader.GetInt64("GameId"),
+                reader.GetString("GameVersion"),
+                Enum.Parse<GameType>(reader.GetString("GameType")),
+                reader.GetString("MatchId"),
+                reader.GetString("PlatformId"),
+                Enum.Parse<Team>(reader.GetInt32("Winner").ToString()),
+                []
+            );
+
+            PerkStats perkStats = new PerkStats
+            {
+                Defense = reader.GetInt32("defense"),
+                Flex = reader.GetInt32("flex"),
+                Offense = reader.GetInt32("offense")
+            };
+
+            PerkStyle primaryStyle = new PerkStyle
+            {
+                Style = reader.GetInt32("primaryStyle"),
+                Description = reader.GetString("primaryStyleDescription"),
+                Selections =
+                [
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection1"),
+                        Var1 = reader.GetInt32("primStyleSelection1Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection1Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection1Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection2"),
+                        Var1 = reader.GetInt32("primStyleSelection2Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection2Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection2Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection3"),
+                        Var1 = reader.GetInt32("primStyleSelection3Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection3Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection3Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection4"),
+                        Var1 = reader.GetInt32("primStyleSelection4Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection4Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection4Var3")
+                    }
+                ]
+            };
+
+            PerkStyle secondaryStyle = new PerkStyle
+            {
+                Style = reader.GetInt32("secondaryStyle"),
+                Description = reader.GetString("secondaryStyleDescription"),
+                Selections =
+                [
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("secStyleSelection1"),
+                        Var1 = reader.GetInt32("secStyleSelection1Var1"),
+                        Var2 = reader.GetInt32("secStyleSelection1Var2"),
+                        Var3 = reader.GetInt32("secStyleSelection1Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("secStyleSelection2"),
+                        Var1 = reader.GetInt32("secStyleSelection2Var1"),
+                        Var2 = reader.GetInt32("secStyleSelection2Var2"),
+                        Var3 = reader.GetInt32("secStyleSelection2Var3")
+                    }
+                ]
+            };
+
+            Perks perks = new Perks
+            {
+                StatPerks = perkStats,
+                Styles = [primaryStyle, secondaryStyle]
+            };
+
+            GameParticipant participant = new GameParticipant(
+                reader.GetString("SummonerName"),
+                reader.GetString("SummonerId"),
+                reader.GetInt32("SummonerLevel"),
+                reader.GetString("SummonerPuuid"),
+                Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
+                Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
+                reader.GetString("TeamPosition"),
+                reader.GetInt32("Kills"),
+                reader.GetInt32("Deaths"),
+                reader.GetInt32("Assists"),
+                [
+                    reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
+                    reader.GetInt32("Item3"),
+                    reader.GetInt32("Item4"), reader.GetInt32("Item5"), reader.GetInt32("Item6")
+                ],
+                [
+                    reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
+                    reader.GetInt32("SpellCast4")
+                ],
+                (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
+                perks
+            );
+            game.Participants.Add(participant);
+        }
+
+        return game;
     }
 }
