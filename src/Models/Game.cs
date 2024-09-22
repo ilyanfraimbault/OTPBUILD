@@ -55,4 +55,9 @@ public class Game
         var options = new JsonSerializerOptions { WriteIndented = true };
         return JsonSerializer.Serialize(this, options);
     }
+
+    public bool IsPlayingChampion(Champion champion, string summonerId)
+    {
+        return Participants.Any(participant => participant.Champion == champion && participant.SummonerId == summonerId);
+    }
 }
