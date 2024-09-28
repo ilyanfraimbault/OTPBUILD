@@ -1,6 +1,6 @@
 using Camille.Enums;
+using Camille.RiotGames.AccountV1;
 using Camille.RiotGames.MatchV5;
-using Camille.RiotGames.SummonerV4;
 using MySql.Data.MySqlClient;
 using OTPBUILD.Configurations;
 using OTPBUILD.Models;
@@ -55,61 +55,46 @@ public class DatabaseService
         return result;
     }
 
-    private int InsertSummoner(GameParticipant? participant = null, Summoner? summoner = null)
+    public int InsertAccount(Account account)
     {
-        if (participant == null && summoner == null) return -1;
-
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var summonerQuery = "INSERT INTO Summoners (Id, Name, Puuid, AccountId, ProfileIconId, RevisionDate, Level) " +
-                            "VALUES (@Id, @Name, @Puuid, @AccountId, @ProfileIconId, @RevisionDate, @Level)";
-        using var summonerCommand = new MySqlCommand(summonerQuery, connection);
+        var query = "INSERT INTO Accounts (Puuid, GameName, TagLine) VALUES (@Puuid, @GameName, @TagLine)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Puuid", account.Puuid);
+        command.Parameters.AddWithValue("@GameName", account.GameName);
+        command.Parameters.AddWithValue("@TagLine", account.TagLine);
 
-        summonerCommand.Parameters.AddWithValue("@Id", summoner?.Id ?? participant?.SummonerId);
-        summonerCommand.Parameters.AddWithValue("@Puuid", summoner?.Puuid ?? participant?.Puuid);
-        summonerCommand.Parameters.AddWithValue("@Name", participant?.SummonerName);
-        summonerCommand.Parameters.AddWithValue("@AccountId", summoner?.AccountId);
-        summonerCommand.Parameters.AddWithValue("@ProfileIconId", summoner?.ProfileIconId);
-        summonerCommand.Parameters.AddWithValue("@RevisionDate", summoner?.RevisionDate);
-        summonerCommand.Parameters.AddWithValue("@Level", summoner?.SummonerLevel ?? participant?.SummonerLevel);
-
-        return summonerCommand.ExecuteNonQuery();
+        return command.ExecuteNonQuery();
     }
 
     private int InsertParticipant(GameParticipant participant, Game game)
     {
         var perksId = InsertPerks(participant.Perks);
 
-        InsertSummoner(participant);
-
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
         var participantQuery =
-            "INSERT INTO Participants " +
-            "VALUES (@GameId, @SummonerPuuid, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
+            "CALL insertParticipant(@GameId, @SummonerPuuid, @SummonerId, @GameName, @TagLine, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
             "@Item0, @Item1, @Item2, @Item3, @Item4, @Item5, @Item6, " +
             "@SpellCast1, @SpellCast2, @SpellCast3, @SpellCast4, @SummonerSpell1, @SummonerSpell2, @Perks, @TeamPosition)";
         using var participantCommand = new MySqlCommand(participantQuery, connection);
         participantCommand.Parameters.AddWithValue("@GameId", game.GameId);
         participantCommand.Parameters.AddWithValue("@SummonerPuuid", participant.Puuid);
+        participantCommand.Parameters.AddWithValue("@SummonerId", participant.SummonerId);
+        participantCommand.Parameters.AddWithValue("@GameName", participant.RiotIdGameName);
+        participantCommand.Parameters.AddWithValue("@TagLine", participant.RiotIdTagline);
         participantCommand.Parameters.AddWithValue("@Champion", participant.Champion);
         participantCommand.Parameters.AddWithValue("@TeamId", participant.TeamId);
         participantCommand.Parameters.AddWithValue("@Kills", participant.Kills);
         participantCommand.Parameters.AddWithValue("@Deaths", participant.Deaths);
         participantCommand.Parameters.AddWithValue("@Assists", participant.Assists);
-        participantCommand.Parameters.AddWithValue("@Item0", participant.Items[0]);
-        participantCommand.Parameters.AddWithValue("@Item1", participant.Items[1]);
-        participantCommand.Parameters.AddWithValue("@Item2", participant.Items[2]);
-        participantCommand.Parameters.AddWithValue("@Item3", participant.Items[3]);
-        participantCommand.Parameters.AddWithValue("@Item4", participant.Items[4]);
-        participantCommand.Parameters.AddWithValue("@Item5", participant.Items[5]);
-        participantCommand.Parameters.AddWithValue("@Item6", participant.Items[6]);
-        participantCommand.Parameters.AddWithValue("@SpellCast1", participant.SpellsCasts[0]);
-        participantCommand.Parameters.AddWithValue("@SpellCast2", participant.SpellsCasts[1]);
-        participantCommand.Parameters.AddWithValue("@SpellCast3", participant.SpellsCasts[2]);
-        participantCommand.Parameters.AddWithValue("@SpellCast4", participant.SpellsCasts[3]);
+        for (int i = 0; i < 7; i++)
+            participantCommand.Parameters.AddWithValue($"@Item{i}", participant.Items[i]);
+        for (int i = 0; i < 4; i++)
+            participantCommand.Parameters.AddWithValue($"@SpellCast{i + 1}", participant.SpellsCasts[i]);
         participantCommand.Parameters.AddWithValue("@SummonerSpell1", participant.SummonerSpells.Item1);
         participantCommand.Parameters.AddWithValue("@SummonerSpell2", participant.SummonerSpells.Item2);
         participantCommand.Parameters.AddWithValue("@Perks", perksId);
@@ -320,7 +305,9 @@ public class DatabaseService
                     reader.GetInt32("SpellCast4")
                 ],
                 (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
-                perks
+                perks,
+                reader.GetString("GameName"),
+                reader.GetString("TagLine")
             );
             game.Participants.Add(participant);
         }
