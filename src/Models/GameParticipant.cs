@@ -11,6 +11,8 @@ public class GameParticipant
     public string SummonerId { get; }
     public int SummonerLevel { get; }
     public string Puuid { get; }
+    public string? RiotIdGameName { get; }
+    public string RiotIdTagline { get; }
 
     public Champion Champion { get; }
     public Team TeamId { get; }
@@ -47,12 +49,14 @@ public class GameParticipant
         SummonerId = participant.SummonerId;
         SummonerLevel = participant.SummonerLevel;
         Puuid = participant.Puuid;
+        RiotIdGameName = participant.RiotIdGameName;
+        RiotIdTagline = participant.RiotIdTagline;
     }
 
     public GameParticipant(
         string summonerName, string summonerId, int summonerLevel, string puuid, Champion champion, Team teamId,
         string teamPosition, int kills, int deaths, int assists, List<int> items, List<int> spellsCasts,
-        (int, int) summonerSpells, Perks perks
+        (int, int) summonerSpells, Perks perks, string? riotIdGameName, string riotIdTagline
         )
     {
         SummonerName = summonerName;
@@ -69,6 +73,8 @@ public class GameParticipant
         SpellsCasts = spellsCasts;
         SummonerSpells = summonerSpells;
         Perks = perks;
+        RiotIdTagline = riotIdTagline;
+        RiotIdGameName = riotIdGameName;
     }
 
     public override string ToString()
