@@ -1,3 +1,4 @@
+using System.Data;
 using Camille.Enums;
 using Camille.RiotGames.AccountV1;
 using Camille.RiotGames.MatchV5;
@@ -22,9 +23,7 @@ public class DatabaseService
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var query =
-            "INSERT INTO Games (GameId, GameDuration, GameStartTimestamp, GameVersion, GameType, PlatformId, Winner, MatchId) " +
-            "VALUES (@GameId, @GameDuration, @GameStartTimestamp, @GameVersion, @GameType, @PlatformId, @Winner, @MatchId)";
+        var query = "CALL insertGame(@GameId, @GameDuration, @GameStartTimestamp, @GameVersion, @GameType, @PlatformId, @Winner, @MatchId)";
 
         using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@GameId", game.GameId);
@@ -35,22 +34,11 @@ public class DatabaseService
         command.Parameters.AddWithValue("@PlatformId", game.PlatformId);
         command.Parameters.AddWithValue("@Winner", game.Winner);
         command.Parameters.AddWithValue("@MatchId", game.MatchId);
-        int result;
-        try
-        {
-            result = command.ExecuteNonQuery();
-        }
-        catch (MySqlException e)
-        {
-            return -1;
-        }
+        var result = command.ExecuteNonQuery();
 
         if (result <= 0) return result;
 
-        foreach (var participant in game.Participants)
-        {
-            InsertParticipant(participant, game);
-        }
+        foreach (var participant in game.Participants) InsertParticipant(participant, game);
 
         return result;
     }
@@ -60,7 +48,7 @@ public class DatabaseService
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var query = "INSERT INTO Accounts (Puuid, GameName, TagLine) VALUES (@Puuid, @GameName, @TagLine)";
+        var query = "CALL insertAccount(@Puuid, @GameName, @TagLine)";
         using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@Puuid", account.Puuid);
         command.Parameters.AddWithValue("@GameName", account.GameName);
@@ -69,7 +57,7 @@ public class DatabaseService
         return command.ExecuteNonQuery();
     }
 
-    private int InsertParticipant(GameParticipant participant, Game game)
+    public int InsertParticipant(GameParticipant participant, Game game)
     {
         var perksId = InsertPerks(participant.Perks);
 
@@ -103,20 +91,26 @@ public class DatabaseService
         return participantCommand.ExecuteNonQuery();
     }
 
-    private int InsertStatPerks(PerkStats statPerks)
+    public int InsertStatPerks(PerkStats stats)
     {
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var statPerksQuery = "INSERT INTO StatPerks (defense, flex, offense) VALUES (@defense, @flex, @offense)";
-        using var statPerksCommand = new MySqlCommand(statPerksQuery, connection);
-        statPerksCommand.Parameters.AddWithValue("@defense", statPerks.Defense);
-        statPerksCommand.Parameters.AddWithValue("@flex", statPerks.Flex);
-        statPerksCommand.Parameters.AddWithValue("@offense", statPerks.Offense);
+        var query = "CALL insertStatPerks(@Defense, @Flex, @Offense, @Id)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Defense", stats.Defense);
+        command.Parameters.AddWithValue("@Flex", stats.Flex);
+        command.Parameters.AddWithValue("@Offense", stats.Offense);
 
-        statPerksCommand.ExecuteNonQuery();
+        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        {
+            Direction = ParameterDirection.Output
+        };
+        command.Parameters.Add(idParam);
 
-        return (int)statPerksCommand.LastInsertedId;
+        command.ExecuteNonQuery();
+
+        return (int)idParam.Value;
     }
 
     private int InsertStyleSelection(PerkStyleSelection styleSelection)
@@ -124,21 +118,27 @@ public class DatabaseService
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var styleSelectionQuery = "INSERT INTO StyleSelection (perk, var1, var2, var3) " +
-                                  "VALUES (@perk, @var1, @var2, @var3)";
-        using var styleSelectionCommand = new MySqlCommand(styleSelectionQuery, connection);
-        styleSelectionCommand.Parameters.AddWithValue("@perk", styleSelection.Perk);
-        styleSelectionCommand.Parameters.AddWithValue("@var1", styleSelection.Var1);
-        styleSelectionCommand.Parameters.AddWithValue("@var2", styleSelection.Var2);
-        styleSelectionCommand.Parameters.AddWithValue("@var3", styleSelection.Var3);
+        var query = "CALL insertStyleSelection(@Perk, @Var1, @Var2, @Var3, @Id)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Perk", styleSelection.Perk);
+        command.Parameters.AddWithValue("@Var1", styleSelection.Var1);
+        command.Parameters.AddWithValue("@Var2", styleSelection.Var2);
+        command.Parameters.AddWithValue("@Var3", styleSelection.Var3);
 
-        styleSelectionCommand.ExecuteNonQuery();
-        return (int)styleSelectionCommand.LastInsertedId;
+        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        {
+            Direction = ParameterDirection.Output
+        };
+        command.Parameters.Add(idParam);
+
+        command.ExecuteNonQuery();
+
+        return (int)idParam.Value;
     }
 
     private int InsertPerksStyle(PerkStyle style)
     {
-        List<int> styleSelectionIds = [];
+        List<int> styleSelectionIds = new List<int>();
 
         foreach (var perkStyleSelection in style.Selections)
         {
@@ -148,21 +148,24 @@ public class DatabaseService
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var styleQuery =
-            "INSERT INTO PerksStyle (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4) " +
-            "VALUES (@description, @style, @styleSelection1, @styleSelection2, @styleSelection3, @styleSelection4)";
-
-        using var styleCommand = new MySqlCommand(styleQuery, connection);
-        styleCommand.Parameters.AddWithValue("@style", style.Style);
-        styleCommand.Parameters.AddWithValue("@description", style.Description);
+        var query = "CALL insertPerksStyle(@Description, @Style, @StyleSelection1, @StyleSelection2, @StyleSelection3, @StyleSelection4, @Id)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Description", style.Description);
+        command.Parameters.AddWithValue("@Style", style.Style);
         for (var i = 0; i < 4; i++)
         {
-            styleCommand.Parameters.AddWithValue($"@styleSelection{i + 1}",
-                styleSelectionIds.Count > i ? styleSelectionIds[i] : null);
+            command.Parameters.AddWithValue($"@StyleSelection{i + 1}", styleSelectionIds.Count > i ? styleSelectionIds[i] : DBNull.Value);
         }
 
-        styleCommand.ExecuteNonQuery();
-        return (int)styleCommand.LastInsertedId;
+        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        {
+            Direction = ParameterDirection.Output
+        };
+        command.Parameters.Add(idParam);
+
+        command.ExecuteNonQuery();
+
+        return (int)idParam.Value;
     }
 
     private int InsertPerks(Perks perks)
@@ -174,15 +177,21 @@ public class DatabaseService
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var perksQuery =
-            "INSERT INTO Perks (statPerks, primaryStyle, secondaryStyle) VALUES (@statPerks, @primaryStyle, @secondaryStyle)";
-        using var perksCommand = new MySqlCommand(perksQuery, connection);
-        perksCommand.Parameters.AddWithValue("@statPerks", statPerksId);
-        perksCommand.Parameters.AddWithValue("@primaryStyle", primaryStyleId);
-        perksCommand.Parameters.AddWithValue("@secondaryStyle", secondaryStyleId);
+        var query = "CALL insertPerks(@StatPerks, @PrimaryStyle, @SecondaryStyle, @Id)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@StatPerks", statPerksId);
+        command.Parameters.AddWithValue("@PrimaryStyle", primaryStyleId);
+        command.Parameters.AddWithValue("@SecondaryStyle", secondaryStyleId);
 
-        perksCommand.ExecuteNonQuery();
-        return (int)perksCommand.LastInsertedId;
+        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        {
+            Direction = ParameterDirection.Output
+        };
+        command.Parameters.Add(idParam);
+
+        command.ExecuteNonQuery();
+
+        return (int)idParam.Value;
     }
 
     public Game? GetGame(long gameId)
