@@ -10,7 +10,10 @@ public class Player
     public string? TwitchChannel { get; }
     public Dictionary<Champion, double> Champions { get; }
 
-    public Player(List<Summoner> summoners, Dictionary<Champion, double> champions, string? name = null, string? twitchChannel = null)
+    public Player(
+        List<Summoner> summoners, Dictionary<Champion, double> champions, string? name = null,
+        string? twitchChannel = null
+        )
     {
         Summoners = summoners;
         Champions = champions;
@@ -18,11 +21,18 @@ public class Player
         TwitchChannel = twitchChannel;
     }
 
-    public Player(Summoner summoner, Champion champion, double playRate, string? name = null, string? twitchChannel = null)
+    public Player(
+        Summoner summoner, Champion champion, double playRate, string? name = null, string? twitchChannel = null
+        )
     {
         Summoners = [summoner];
-        Champions = new Dictionary<Champion, double> {{champion, playRate}};
+        Champions = new Dictionary<Champion, double> { { champion, playRate } };
         TwitchChannel = twitchChannel;
         Name = name;
+    }
+
+    public Player(string name, string? twitchChannel = null) : this([],
+        new Dictionary<Champion, double>(), name: name, twitchChannel: twitchChannel)
+    {
     }
 }
