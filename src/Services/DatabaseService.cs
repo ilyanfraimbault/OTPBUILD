@@ -67,7 +67,7 @@ public class DatabaseService
         var participantQuery =
             "CALL insertParticipant(@GameId, @SummonerPuuid, @SummonerId, @GameName, @TagLine, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
             "@Item0, @Item1, @Item2, @Item3, @Item4, @Item5, @Item6, " +
-            "@SpellCast1, @SpellCast2, @SpellCast3, @SpellCast4, @SummonerSpell1, @SummonerSpell2, @Perks, @TeamPosition)";
+            "@SpellCast1, @SpellCast2, @SpellCast3, @SpellCast4, @SummonerSpell1, @SummonerSpell2, @Perks, @TeamPosition, @PlatformId)";
         using var participantCommand = new MySqlCommand(participantQuery, connection);
         participantCommand.Parameters.AddWithValue("@GameId", game.GameId);
         participantCommand.Parameters.AddWithValue("@SummonerPuuid", participant.Puuid);
@@ -87,6 +87,7 @@ public class DatabaseService
         participantCommand.Parameters.AddWithValue("@SummonerSpell2", participant.SummonerSpells.Item2);
         participantCommand.Parameters.AddWithValue("@Perks", perksId);
         participantCommand.Parameters.AddWithValue("@TeamPosition", participant.TeamPosition);
+        participantCommand.Parameters.AddWithValue("@PlatformId", game.PlatformId);
 
         return participantCommand.ExecuteNonQuery();
     }
@@ -192,6 +193,35 @@ public class DatabaseService
         command.ExecuteNonQuery();
 
         return (int)idParam.Value;
+    }
+
+    public int InsertPlayer(Player player)
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "CALL insertPlayer(@PlayerName, @TwitchChannel)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@PlayerName", player.Name);
+        command.Parameters.AddWithValue("@TwitchChannel", player.TwitchChannel);
+
+        return command.ExecuteNonQuery() + player.Champions.Sum(
+            champion => InsertPlayerChampion(player, champion.Key, champion.Value)
+            );
+    }
+
+    private int InsertPlayerChampion(Player player, Champion champion, double playRate)
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "CALL insertPlayerChampion(@PlayerName, @Champion, @PlayRate)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@PlayerName", player.Name);
+        command.Parameters.AddWithValue("@Champion", champion);
+        command.Parameters.AddWithValue("@PlayRate", playRate);
+
+        return command.ExecuteNonQuery();
     }
 
     public Game? GetGame(long gameId)
@@ -322,5 +352,28 @@ public class DatabaseService
         }
 
         return game;
+    }
+
+    public Player? GetPlayer(string playerName)
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "CALL GetPlayer(@PlayerName)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@PlayerName", playerName);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.HasRows) return null;
+
+        Player? player = null;
+        while (reader.Read())
+        {
+            player ??= new Player(reader.GetString("PlayerName"), reader.GetString("TwitchChannel"));
+            var champion = (Champion)Enum.Parse(typeof(Champion), reader.GetInt32("Champion").ToString());
+            player.Champions.Add(champion, reader.GetDouble("PlayRate"));
+        }
+
+        return player;
     }
 }
