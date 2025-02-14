@@ -1,6 +1,6 @@
 using Camille.Enums;
 using Camille.RiotGames;
-using Camille.RiotGames.MatchV5;
+using Camille.RiotGames.LeagueV4;
 using Camille.RiotGames.SummonerV4;
 using OTPBUILD.Models;
 
@@ -8,94 +8,162 @@ namespace OTPBUILD.Services;
 
 public class FetchOtps
 {
-    private List<Otp> _otps = [];
-    private Champion _champion;
-    private RiotGamesApi _riotApi;
-    private List<PlatformRoute> _platformRoutes;
+    public Dictionary<PlatformRoute, List<Summoner>> Mains { get; }
+    public List<Player> Players { get; }
+    public Champion Champion { get; }
+    private readonly RiotGamesApi _riotApi;
+    public List<PlatformRoute> PlatformRoutes { get; }
 
     public FetchOtps(Champion champion, RiotGamesApi riotApi)
     {
-        _champion = champion;
+        Champion = champion;
         _riotApi = riotApi;
-        _platformRoutes = [];
+        PlatformRoutes = [];
+        Mains = new();
+        Players = [];
     }
 
     public FetchOtps(Champion champion, RiotGamesApi riotApi, List<PlatformRoute> platformRoutes)
         : this(champion, riotApi)
     {
-        _platformRoutes = platformRoutes;
+        PlatformRoutes = platformRoutes;
     }
 
     public FetchOtps(Champion champion, RiotGamesApi riotApi, PlatformRoute platformRoute)
         : this(champion, riotApi)
     {
-        _platformRoutes = [platformRoute];
+        PlatformRoutes = [platformRoute];
     }
 
-    public void FindOtps()
+    public int FindMains()
     {
-        foreach (var platform in _platformRoutes)
+        var count = 0;
+        foreach (var platform in PlatformRoutes)
         {
-            Console.WriteLine($"Fetching OTPs for {platform}");
-            var leagueList = _riotApi.LeagueV4().GetChallengerLeague(platform, QueueType.RANKED_SOLO_5x5);
-            foreach (var leagueListEntry in leagueList.Entries)
+            List<Summoner> list = [];
+            Console.WriteLine($"Fetching Mains for {platform}");
+
+            var leagueEntriesList = GetEntries(platform, 20);
+
+            Console.WriteLine($"Found {leagueEntriesList.Count} entries");
+            Summoner summoner;
+            foreach (var entry in leagueEntriesList)
             {
-                var summonerId = leagueListEntry.SummonerId;
-                var summoner = _riotApi.SummonerV4().GetBySummonerId(platform, summonerId);
-                string[] matchIds = _riotApi.MatchV5().GetMatchIdsByPUUID(platform.ToRegional(), summoner.Puuid);
-                var matches = GetMatchesWherePlayingChampion(summoner, platform.ToRegional(), matchIds);
-                return;
-                if (IsOtp(summoner, platform))
+                Console.WriteLine($"Checking Main for {entry.SummonerId}");
+                var summonerId = entry.SummonerId;
+                try
                 {
-                    Console.WriteLine($"Found OTP {summoner.Id}");
-                    _otps.Add(new Otp(summoner, _champion, platform));
+                    summoner = _riotApi.SummonerV4().GetBySummonerId(platform, summonerId);
+                }
+                catch (Exception e)
+                {
+                    continue;
+                }
+
+                if (IsMain(summoner, platform))
+                {
+                    list.Add(summoner);
+                    count++;
+                    Console.WriteLine(
+                        $"Found Main AccountId : {summoner.AccountId}\n LP : {entry.LeaguePoints}\n isVeteran : {entry.Veteran}\n Ratio : {entry.Wins}/{entry.Losses} ({entry.Wins / (entry.Wins + entry.Losses)})");
                 }
             }
+
+            Mains.Add(platform, list);
         }
+
+        return count;
     }
 
-    public bool IsOtp(Summoner summoner, PlatformRoute platform)
+    private List<LeagueItem> GetEntries(PlatformRoute platform, int amount)
     {
-        var championMastery =
-            _riotApi.ChampionMasteryV4().GetChampionMasteryByPUUID(platform, summoner.Puuid, _champion);
-        if (championMastery == null)
+        var challengerLeague = _riotApi.LeagueV4().GetChallengerLeague(platform, QueueType.RANKED_SOLO_5x5);
+        var grandmasterLeague = _riotApi.LeagueV4().GetGrandmasterLeague(platform, QueueType.RANKED_SOLO_5x5);
+        var masterLeague = _riotApi.LeagueV4().GetMasterLeague(platform, QueueType.RANKED_SOLO_5x5);
+        var leagueEntriesList = challengerLeague.Entries
+            .Concat(grandmasterLeague.Entries).ToList()
+            .Concat(masterLeague.Entries).ToList();
+        leagueEntriesList.Sort((a, b) => b.LeaguePoints.CompareTo(a.LeaguePoints));
+        leagueEntriesList = leagueEntriesList[..Math.Min(leagueEntriesList.Count, amount)];
+        return leagueEntriesList;
+    }
+
+    public int FindPlayers()
+    {
+        var count = 0;
+        foreach (var entry in Mains)
         {
-            return false;
+            List<Player> list = [];
+            foreach (var main in entry.Value)
+            {
+                Console.WriteLine($"Fetching Player : {main.Puuid}");
+                var playRate = GetPlayRate(main, entry.Key.ToRegional(), 20);
+                Console.WriteLine($"PlayRate : {playRate}");
+                if (playRate > 0.1)
+                {
+                    var accountName = _riotApi.AccountV1().GetByPuuid(entry.Key.ToRegional(), main.Puuid).GameName;
+                    if (accountName is null) continue;
+                    var player =
+                        new Player(
+                            new Dictionary<PlatformRoute, List<Summoner>>
+                                { { entry.Key, new List<Summoner> { main } } },
+                            new Dictionary<Champion, double> { { Champion, playRate } },
+                            accountName);
+                    list.Add(player);
+                    count++;
+                }
+            }
+
+            Players.AddRange(list);
         }
 
-        return championMastery.ChampionPoints > 100000 &&
-               DateTimeOffset.FromUnixTimeMilliseconds(championMastery.LastPlayTime).UtcDateTime >
-               DateTimeOffset.Now.AddDays(-10);
+        return count;
     }
 
-    public List<Match> GetMatchesWherePlayingChampion(Summoner summoner, RegionalRoute platform, string[] matchIds)
+    public double GetPlayRate(Summoner summoner, RegionalRoute route, int amount = 50)
     {
-        List<Match> matches = [];
+        var matchList = _riotApi.MatchV5().GetMatchIdsByPUUID(route, summoner.Puuid, amount);
+        var games = GetGames(route, matchList);
+
+        var gamesPlayed = games.Count;
+        var gamesPlayedWithChampion = GetGamesPlayingChampion(summoner, route, matchList).Count;
+        return (double)gamesPlayedWithChampion / gamesPlayed;
+    }
+
+    public bool IsMain(Summoner summoner, PlatformRoute platform)
+    {
+        var championMasteries = _riotApi.ChampionMasteryV4()
+            .GetChampionMasteryByPUUID(platform, summoner.Puuid, Champion);
+        if (championMasteries is null) return false;
+        var lastPlayTime = DateTimeOffset.FromUnixTimeMilliseconds(championMasteries.LastPlayTime);
+        return championMasteries.ChampionPoints > 100000 && lastPlayTime > DateTimeOffset.Now.AddDays(-7);
+    }
+
+    public List<Game> GetGames(RegionalRoute platform, string[] matchIds)
+    {
+        List<Game> games = [];
         foreach (var matchId in matchIds)
         {
             var match = _riotApi.MatchV5().GetMatch(platform, matchId);
-            if (match is not null && IsPlayingChampion(match, summoner)) matches.Add(match);
-            if (match != null)
-            {
-                Game game = new Game(match);
-                Console.WriteLine(game);
-                return matches;
-            }
+            if (match is not null) games.Add(new Game(match));
         }
 
-        return matches;
+        return games;
     }
 
-    public bool IsPlayingChampion(Match Match, Summoner summoner)
+    public List<Game> GetGamesPlayingChampion(Summoner summoner, RegionalRoute platform, string[]? matchIds = null)
     {
-        foreach (var participant in Match.Info.Participants)
+        List<Game> games = [];
+        foreach (var matchId in matchIds ?? _riotApi.MatchV5().GetMatchIdsByPUUID(platform, summoner.Puuid, 50))
         {
-            if (participant.Puuid == summoner.Puuid && participant.ChampionId == _champion)
+            var match = _riotApi.MatchV5().GetMatch(platform, matchId);
+            if (match is not null)
             {
-                return true;
+                var game = new Game(match);
+                if (game.IsPlayingChampion(Champion, summoner.Id)) games.Add(game);
             }
         }
 
-        return false;
+        return games;
     }
 }

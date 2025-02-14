@@ -1,127 +1,176 @@
-CREATE TABLE Players
+create table Accounts
 (
-    PlayerName    VARCHAR(50) PRIMARY KEY,
-    TwitchChannel VARCHAR(50)
+    Puuid    varchar(78) not null
+        primary key,
+    GameName varchar(50) null,
+    TagLine  varchar(50) null
 );
 
-CREATE TABLE PlayerChampions
+create table Games
 (
-    PlayerName VARCHAR(50) NOT NULL,
-    Champion   INT         NOT NULL,
-    PlayRate   FLOAT       NOT NULL,
-    PRIMARY KEY (PlayerName, Champion),
-    FOREIGN KEY (PlayerName) REFERENCES Players (PlayerName)
+    GameDuration       int         not null,
+    GameStartTimestamp bigint      not null,
+    GameId             bigint      not null
+        primary key,
+    GameVersion        varchar(50) not null,
+    GameType           varchar(50) not null,
+    MatchId            varchar(50) not null,
+    PlatformId         varchar(10) not null,
+    Winner             int         not null
 );
 
-CREATE TABLE Summoners
+create table Players
 (
-    Id            VARCHAR(63) NOT NULL,
-    Puuid         VARCHAR(78) NOT NULL,
-    Name          VARCHAR(50),
-    AccountId     VARCHAR(56),
-    ProfileIconId INT,
-    RevisionDate  BIGINT,
-    Level         BIGINT,
-    PlayerName    VARCHAR(50),
-    PRIMARY KEY (Puuid),
-    FOREIGN KEY (PlayerName) REFERENCES Players (PlayerName)
+    PlayerName    varchar(50) not null
+        primary key,
+    TwitchChannel varchar(50) null
 );
 
-CREATE TABLE Accounts
+create table PlayerChampions
 (
-    Puuid    VARCHAR(78) NOT NULL,
-    GameName VARCHAR(50),
-    TagLine  VARCHAR(50),
-    PRIMARY KEY (Puuid)
+    PlayerName varchar(50) not null,
+    Champion   int         not null,
+    PlayRate   float       not null,
+    primary key (PlayerName, Champion),
+    constraint PlayerChampions_ibfk_1
+        foreign key (PlayerName) references Players (PlayerName)
 );
 
-CREATE TABLE Games
+create table StatPerks
 (
-    GameDuration       INT         NOT NULL,
-    GameStartTimestamp BIGINT      NOT NULL,
-    GameId             BIGINT      NOT NULL,
-    GameVersion        VARCHAR(50) NOT NULL,
-    GameType           VARCHAR(50) NOT NULL,
-    MatchId            VARCHAR(50) NOT NULL,
-    PlatformId         VARCHAR(10) NOT NULL,
-    Winner             INT         NOT NULL,
-    PRIMARY KEY (GameId)
+    id      int auto_increment
+        primary key,
+    defense int not null,
+    flex    int not null,
+    offense int not null
 );
 
-CREATE TABLE StatPerks
+create table StyleSelection
 (
-    id      INT AUTO_INCREMENT PRIMARY KEY,
-    defense INT NOT NULL,
-    flex    INT NOT NULL,
-    offense INT NOT NULL
+    id   int auto_increment
+        primary key,
+    perk int not null,
+    var1 int not null,
+    var2 int not null,
+    var3 int not null
 );
 
-CREATE TABLE StyleSelection
+create table PerksStyle
 (
-    id   INT AUTO_INCREMENT PRIMARY KEY,
-    perk INT NOT NULL,
-    var1 INT NOT NULL,
-    var2 INT NOT NULL,
-    var3 INT NOT NULL
+    id              int auto_increment
+        primary key,
+    description     varchar(50) not null,
+    style           int         not null,
+    styleSelection1 int         not null,
+    styleSelection2 int         not null,
+    styleSelection3 int         null,
+    styleSelection4 int         null,
+    constraint PerksStyle_ibfk_1
+        foreign key (styleSelection1) references StyleSelection (id),
+    constraint PerksStyle_ibfk_2
+        foreign key (styleSelection2) references StyleSelection (id),
+    constraint PerksStyle_ibfk_3
+        foreign key (styleSelection3) references StyleSelection (id),
+    constraint PerksStyle_ibfk_4
+        foreign key (styleSelection4) references StyleSelection (id)
 );
 
-CREATE TABLE PerksStyle
+create table Perks
 (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    description     VARCHAR(50) NOT NULL,
-    style           INT         NOT NULL,
-    styleSelection1 INT         NOT NULL,
-    styleSelection2 INT         NOT NULL,
-    styleSelection3 INT,
-    styleSelection4 INT,
-    FOREIGN KEY (styleSelection1) REFERENCES StyleSelection (id),
-    FOREIGN KEY (styleSelection2) REFERENCES StyleSelection (id),
-    FOREIGN KEY (styleSelection3) REFERENCES StyleSelection (id),
-    FOREIGN KEY (styleSelection4) REFERENCES StyleSelection (id)
+    id             int auto_increment
+        primary key,
+    statPerks      int not null,
+    primaryStyle   int not null,
+    secondaryStyle int not null,
+    constraint Perks_ibfk_1
+        foreign key (statPerks) references StatPerks (id),
+    constraint Perks_ibfk_2
+        foreign key (primaryStyle) references PerksStyle (id),
+    constraint Perks_ibfk_3
+        foreign key (secondaryStyle) references PerksStyle (id)
 );
 
-CREATE TABLE Perks
+create index primaryStyle
+    on Perks (primaryStyle);
+
+create index secondaryStyle
+    on Perks (secondaryStyle);
+
+create index statPerks
+    on Perks (statPerks);
+
+create index styleSelection1
+    on PerksStyle (styleSelection1);
+
+create index styleSelection2
+    on PerksStyle (styleSelection2);
+
+create index styleSelection3
+    on PerksStyle (styleSelection3);
+
+create index styleSelection4
+    on PerksStyle (styleSelection4);
+
+create table Summoners
 (
-    id             INT AUTO_INCREMENT PRIMARY KEY,
-    statPerks      INT NOT NULL,
-    primaryStyle   INT NOT NULL,
-    secondaryStyle INT NOT NULL,
-    FOREIGN KEY (statPerks) REFERENCES StatPerks (id),
-    FOREIGN KEY (primaryStyle) REFERENCES PerksStyle (id),
-    FOREIGN KEY (secondaryStyle) REFERENCES PerksStyle (id)
+    Id            varchar(63) not null,
+    Puuid         varchar(78) not null
+        primary key,
+    Name          varchar(50) null,
+    AccountId     varchar(56) null,
+    ProfileIconId int         null,
+    RevisionDate  bigint      null,
+    Level         bigint      null,
+    PlayerName    varchar(50) null,
+    PlatformId    varchar(10) not null,
+    constraint Summoners_ibfk_1
+        foreign key (PlayerName) references Players (PlayerName)
 );
 
-CREATE TABLE Participants
+create table Participants
 (
-    GameId         BIGINT      NOT NULL,
-    SummonerPuuid  VARCHAR(78) NOT NULL,
-    Champion       INT         NOT NULL,
-    TeamId         INT         NOT NULL,
-    Kills          INT         NOT NULL,
-    Deaths         INT         NOT NULL,
-    Assists        INT         NOT NULL,
-    item0          INT         NOT NULL,
-    item1          INT         NOT NULL,
-    item2          INT         NOT NULL,
-    item3          INT         NOT NULL,
-    item4          INT         NOT NULL,
-    item5          INT         NOT NULL,
-    item6          INT         NOT NULL,
-    spellCast1     INT         NOT NULL,
-    spellCast2     INT         NOT NULL,
-    spellCast3     INT         NOT NULL,
-    spellCast4     INT         NOT NULL,
-    SummonerSpell1 INT         NOT NULL,
-    SummonerSpell2 INT         NOT NULL,
-    Perks          INT         NOT NULL,
-    TeamPosition   VARCHAR(10) NOT NULL,
-    PRIMARY KEY (GameId, SummonerPuuid),
-    FOREIGN KEY (Perks) REFERENCES Perks (id),
-    FOREIGN KEY (SummonerPuuid) REFERENCES Summoners (Puuid),
-    FOREIGN KEY (GameId) REFERENCES Games (GameId)
+    GameId         bigint      not null,
+    SummonerPuuid  varchar(78) not null,
+    Champion       int         not null,
+    TeamId         int         not null,
+    Kills          int         not null,
+    Deaths         int         not null,
+    Assists        int         not null,
+    item0          int         not null,
+    item1          int         not null,
+    item2          int         not null,
+    item3          int         not null,
+    item4          int         not null,
+    item5          int         not null,
+    item6          int         not null,
+    spellCast1     int         not null,
+    spellCast2     int         not null,
+    spellCast3     int         not null,
+    spellCast4     int         not null,
+    SummonerSpell1 int         not null,
+    SummonerSpell2 int         not null,
+    Perks          int         not null,
+    TeamPosition   varchar(10) not null,
+    primary key (GameId, SummonerPuuid),
+    constraint Participants_ibfk_1
+        foreign key (Perks) references Perks (id),
+    constraint Participants_ibfk_2
+        foreign key (SummonerPuuid) references Summoners (Puuid),
+    constraint Participants_ibfk_3
+        foreign key (GameId) references Games (GameId)
 );
 
-CREATE PROCEDURE getGame(game_id BIGINT)
+create index Perks
+    on Participants (Perks);
+
+create index SummonerPuuid
+    on Participants (SummonerPuuid);
+
+create index PlayerName
+    on Summoners (PlayerName);
+
+create
+    definer = fraimbaulti@localhost procedure getGame(IN game_id bigint)
 BEGIN
     SELECT GameDuration,
            GameStartTimestamp,
@@ -210,195 +259,82 @@ BEGIN
     WHERE G.GameId = game_id;
 END;
 
-DELIMITER //
+create
+    definer = fraimbaulti@localhost procedure insertAccount(IN p_Puuid varchar(78), IN p_GameName varchar(50),
+                                                            IN p_TagLine varchar(50))
+BEGIN
+    INSERT INTO Accounts (Puuid, GameName, TagLine)
+    VALUES (p_Puuid, p_GameName, p_TagLine)
+    ON DUPLICATE KEY UPDATE GameName = p_GameName, TagLine = p_TagLine;
+END;
 
-CREATE PROCEDURE insertParticipant(
-    IN p_GameId BIGINT,
-    IN p_SummonerPuuid VARCHAR(78),
-    IN p_SummonerId VARCHAR(63),
-    IN p_GameName VARCHAR(50),
-    IN p_TagLine VARCHAR(50),
-    IN p_Champion INT,
-    IN p_TeamId INT,
-    IN p_Kills INT,
-    IN p_Deaths INT,
-    IN p_Assists INT,
-    IN p_Item0 INT,
-    IN p_Item1 INT,
-    IN p_Item2 INT,
-    IN p_Item3 INT,
-    IN p_Item4 INT,
-    IN p_Item5 INT,
-    IN p_Item6 INT,
-    IN p_SpellCast1 INT,
-    IN p_SpellCast2 INT,
-    IN p_SpellCast3 INT,
-    IN p_SpellCast4 INT,
-    IN p_SummonerSpell1 INT,
-    IN p_SummonerSpell2 INT,
-    IN p_Perks INT,
-    IN p_TeamPosition VARCHAR(10)
-)
+create
+    definer = fraimbaulti@localhost procedure insertGame(IN p_GameId bigint, IN p_GameDuration int,
+                                                         IN p_GameStartTimestamp bigint, IN p_GameVersion varchar(50),
+                                                         IN p_GameType varchar(50), IN p_PlatformId varchar(10),
+                                                         IN p_Winner int, IN p_MatchId varchar(50))
+BEGIN
+    INSERT INTO Games
+    VALUES (p_GameDuration, p_GameStartTimestamp, p_GameId, p_GameVersion, p_GameType, p_MatchId, p_PlatformId,
+            p_Winner)
+    ON DUPLICATE KEY UPDATE GameDuration       = p_GameDuration,
+                            GameStartTimestamp = p_GameStartTimestamp,
+                            GameVersion        = p_GameVersion,
+                            GameType           = p_GameType,
+                            MatchId            = p_MatchId,
+                            PlatformId         = p_PlatformId,
+                            Winner             = p_Winner;
+END;
+
+create
+    definer = fraimbaulti@localhost procedure insertParticipant(IN p_GameId bigint, IN p_SummonerPuuid varchar(78),
+                                                                IN p_SummonerId varchar(63), IN p_GameName varchar(50),
+                                                                IN p_TagLine varchar(50), IN p_Champion int,
+                                                                IN p_TeamId int, IN p_Kills int, IN p_Deaths int,
+                                                                IN p_Assists int, IN p_Item0 int, IN p_Item1 int,
+                                                                IN p_Item2 int, IN p_Item3 int, IN p_Item4 int,
+                                                                IN p_Item5 int, IN p_Item6 int, IN p_SpellCast1 int,
+                                                                IN p_SpellCast2 int, IN p_SpellCast3 int,
+                                                                IN p_SpellCast4 int, IN p_SummonerSpell1 int,
+                                                                IN p_SummonerSpell2 int, IN p_Perks int,
+                                                                IN p_TeamPosition varchar(10),
+                                                                IN p_PlatformId varchar(10))
 BEGIN
     CALL insertAccount(p_SummonerPuuid, p_GameName, p_TagLine);
     CALL insertSummoner(p_SummonerId, p_SummonerPuuid, p_GameName,
-                        NULL, NULL, NULL, NULL, NULL);
+                        NULL, NULL, NULL, NULL, NULL, p_PlatformId);
 
-    IF NOT EXISTS (SELECT * FROM Participants WHERE GameId = p_GameId AND Participants.SummonerPuuid = p_SummonerPuuid) THEN
-        INSERT INTO Participants
-        VALUES (p_GameId, p_SummonerPuuid, p_Champion, p_TeamId, p_Kills, p_Deaths, p_Assists,
-                p_Item0, p_Item1, p_Item2, p_Item3, p_Item4, p_Item5, p_Item6,
-                p_SpellCast1, p_SpellCast2, p_SpellCast3, p_SpellCast4,
-                p_SummonerSpell1, p_SummonerSpell2, p_Perks, p_TeamPosition);
-    END IF;
-END //
+    INSERT INTO Participants
+    VALUES (p_GameId, p_SummonerPuuid, p_Champion, p_TeamId, p_Kills, p_Deaths, p_Assists,
+            p_Item0, p_Item1, p_Item2, p_Item3, p_Item4, p_Item5, p_Item6,
+            p_SpellCast1, p_SpellCast2, p_SpellCast3, p_SpellCast4,
+            p_SummonerSpell1, p_SummonerSpell2, p_Perks, p_TeamPosition, p_PlatformId)
+    ON DUPLICATE KEY UPDATE p_GameId = p_GameId;
+END;
 
-CREATE PROCEDURE insertAccount(
-    IN p_Puuid VARCHAR(78),
-    IN p_GameName VARCHAR(50),
-    IN p_TagLine VARCHAR(50)
-)
-BEGIN
-    IF NOT EXISTS (SELECT * FROM Accounts WHERE Puuid = p_Puuid) THEN
-        INSERT INTO Accounts (Puuid, GameName, TagLine)
-        VALUES (p_Puuid, p_GameName, p_TagLine);
-    ELSE
-        UPDATE Accounts
-        SET GameName = IFNULL(GameName, p_GameName),
-            TagLine  = IFNULL(TagLine, p_TagLine)
-        WHERE Puuid = p_Puuid;
-    END IF;
-END //
-
-CREATE PROCEDURE insertSummoner(
-    IN p_Id VARCHAR(63),
-    IN p_Puuid VARCHAR(78),
-    IN p_Name VARCHAR(50),
-    IN p_AccountId VARCHAR(56),
-    IN p_ProfileIconId INT,
-    IN p_RevisionDate BIGINT,
-    IN p_Level BIGINT,
-    IN p_PlayerName VARCHAR(50)
-)
-BEGIN
-    IF NOT EXISTS (SELECT * FROM Summoners WHERE Puuid = p_Puuid) THEN
-        INSERT INTO Summoners
-        VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlayerName);
-    ELSE
-        UPDATE Summoners
-        SET Name          = IFNULL(Name, p_Name),
-            AccountId     = IFNULL(AccountId, p_AccountId),
-            ProfileIconId = IFNULL(ProfileIconId, p_ProfileIconId),
-            RevisionDate  = IFNULL(RevisionDate, p_RevisionDate),
-            Level         = IFNULL(Level, p_Level),
-            PlayerName    = IFNULL(PlayerName, p_PlayerName)
-        WHERE Puuid = p_Puuid;
-    END IF;
-END //
-
-CREATE PROCEDURE insertPlayer(
-    IN p_PlayerName VARCHAR(50),
-    IN p_TwitchChannel VARCHAR(50)
-)
-BEGIN
-    IF NOT EXISTS (SELECT * FROM Players WHERE PlayerName = p_PlayerName) THEN
-        INSERT INTO Players
-        VALUES (p_PlayerName, p_TwitchChannel);
-    ELSE
-        UPDATE Players
-        SET TwitchChannel = IFNULL(TwitchChannel, p_TwitchChannel)
-        WHERE PlayerName = p_PlayerName;
-    END IF;
-END //
-
-CREATE PROCEDURE insertPlayerChampion(
-    IN p_PlayerName VARCHAR(50),
-    IN p_Champion INT,
-    IN p_PlayRate FLOAT
-)
-BEGIN
-    IF NOT EXISTS (SELECT * FROM PlayerChampions WHERE PlayerName = p_PlayerName AND Champion = p_Champion) THEN
-        INSERT INTO PlayerChampions
-        VALUES (p_PlayerName, p_Champion, p_PlayRate);
-    ELSE
-        UPDATE PlayerChampions
-        SET PlayRate = IFNULL(PlayRate, p_PlayRate)
-        WHERE PlayerName = p_PlayerName
-          AND Champion = p_Champion;
-    END IF;
-END //
-
-CREATE PROCEDURE insertGame(
-    IN p_GameId BIGINT,
-    IN p_GameDuration INT,
-    IN p_GameStartTimestamp BIGINT,
-    IN p_GameVersion VARCHAR(50),
-    IN p_GameType VARCHAR(50),
-    IN p_PlatformId VARCHAR(10),
-    IN p_Winner INT,
-    IN p_MatchId VARCHAR(50)
-)
-BEGIN
-    IF NOT EXISTS (SELECT * FROM Games WHERE GameId = p_GameId) THEN
-        INSERT INTO Games
-        VALUES (p_GameDuration, p_GameStartTimestamp, p_GameId, p_GameVersion, p_GameType, p_MatchId, p_PlatformId,
-                p_Winner);
-    END IF;
-END //
-
-CREATE PROCEDURE insertStatPerks(
-    IN p_Defense INT,
-    IN p_Flex INT,
-    IN p_Offense INT,
-    OUT p_Id INT
-)
+create
+    definer = fraimbaulti@localhost procedure insertPerks(IN p_StatPerks int, IN p_PrimaryStyle int,
+                                                          IN p_SecondaryStyle int, OUT p_Id int)
 BEGIN
     SELECT id
     INTO p_Id
-    FROM StatPerks
-    WHERE defense = p_Defense
-      AND flex = p_Flex
-      AND offense = p_Offense;
+    FROM Perks
+    WHERE statPerks = p_StatPerks
+      AND primaryStyle = p_PrimaryStyle
+      AND secondaryStyle = p_SecondaryStyle;
 
     IF p_Id IS NULL THEN
-        INSERT INTO StatPerks (defense, flex, offense)
-        VALUES (p_Defense, p_Flex, p_Offense);
+        INSERT INTO Perks (statPerks, primaryStyle, secondaryStyle)
+        VALUES (p_StatPerks, p_PrimaryStyle, p_SecondaryStyle);
         SET p_Id = LAST_INSERT_ID();
     END IF;
-END //
+END;
 
-CREATE PROCEDURE insertStyleSelection(
-    IN p_Perk INT,
-    IN p_Var1 INT,
-    IN p_Var2 INT,
-    IN p_Var3 INT,
-    OUT p_Id INT
-)
-BEGIN
-    SELECT id
-    INTO p_Id
-    FROM StyleSelection
-    WHERE perk = p_Perk
-      AND var1 = p_Var1
-      AND var2 = p_Var2
-      AND var3 = p_Var3;
-
-    IF p_Id IS NULL THEN
-        INSERT INTO StyleSelection (perk, var1, var2, var3)
-        VALUES (p_Perk, p_Var1, p_Var2, p_Var3);
-        SET p_Id = LAST_INSERT_ID();
-    END IF;
-END //
-
-CREATE PROCEDURE insertPerksStyle(
-    IN p_Description VARCHAR(50),
-    IN p_Style INT,
-    IN p_StyleSelection1 INT,
-    IN p_StyleSelection2 INT,
-    IN p_StyleSelection3 INT,
-    IN p_StyleSelection4 INT,
-    OUT p_Id INT
-)
+create
+    definer = fraimbaulti@localhost procedure insertPerksStyle(IN p_Description varchar(50), IN p_Style int,
+                                                               IN p_StyleSelection1 int, IN p_StyleSelection2 int,
+                                                               IN p_StyleSelection3 int, IN p_StyleSelection4 int,
+                                                               OUT p_Id int)
 BEGIN
     SELECT id
     INTO p_Id
@@ -415,27 +351,76 @@ BEGIN
         VALUES (p_Description, p_Style, p_StyleSelection1, p_StyleSelection2, p_StyleSelection3, p_StyleSelection4);
         SET p_Id = LAST_INSERT_ID();
     END IF;
-END //
+END;
 
-CREATE PROCEDURE insertPerks(
-    IN p_StatPerks INT,
-    IN p_PrimaryStyle INT,
-    IN p_SecondaryStyle INT,
-    OUT p_Id INT
-)
+create
+    definer = fraimbaulti@localhost procedure insertPlayer(IN p_PlayerName varchar(50), IN p_TwitchChannel varchar(50))
+BEGIN
+    INSERT INTO Players (PlayerName, TwitchChannel)
+    VALUES (p_PlayerName, p_TwitchChannel)
+    ON DUPLICATE KEY UPDATE
+        TwitchChannel = VALUES(TwitchChannel);
+END;
+
+create
+    definer = fraimbaulti@localhost procedure insertPlayerChampion(IN p_PlayerName varchar(50), IN p_Champion int, IN p_PlayRate float)
+BEGIN
+    INSERT INTO PlayerChampions (PlayerName, Champion, PlayRate)
+    VALUES (p_PlayerName, p_Champion, p_PlayRate)
+    ON DUPLICATE KEY UPDATE
+        PlayRate = IFNULL(PlayRate, p_PlayRate);
+END;
+
+create
+    definer = fraimbaulti@localhost procedure insertStatPerks(IN p_Defense int, IN p_Flex int, IN p_Offense int, OUT p_Id int)
 BEGIN
     SELECT id
     INTO p_Id
-    FROM Perks
-    WHERE statPerks = p_StatPerks
-      AND primaryStyle = p_PrimaryStyle
-      AND secondaryStyle = p_SecondaryStyle;
+    FROM StatPerks
+    WHERE defense = p_Defense
+      AND flex = p_Flex
+      AND offense = p_Offense;
 
     IF p_Id IS NULL THEN
-        INSERT INTO Perks (statPerks, primaryStyle, secondaryStyle)
-        VALUES (p_StatPerks, p_PrimaryStyle, p_SecondaryStyle);
+        INSERT INTO StatPerks (defense, flex, offense)
+        VALUES (p_Defense, p_Flex, p_Offense);
         SET p_Id = LAST_INSERT_ID();
     END IF;
-END //
+END;
 
-DELIMITER //
+create
+    definer = fraimbaulti@localhost procedure insertStyleSelection(IN p_Perk int, IN p_Var1 int, IN p_Var2 int, IN p_Var3 int, OUT p_Id int)
+BEGIN
+    SELECT id
+    INTO p_Id
+    FROM StyleSelection
+    WHERE perk = p_Perk
+      AND var1 = p_Var1
+      AND var2 = p_Var2
+      AND var3 = p_Var3;
+
+    IF p_Id IS NULL THEN
+        INSERT INTO StyleSelection (perk, var1, var2, var3)
+        VALUES (p_Perk, p_Var1, p_Var2, p_Var3);
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+END;
+
+create
+    definer = fraimbaulti@localhost procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78),
+                                                             IN p_Name varchar(50), IN p_AccountId varchar(56),
+                                                             IN p_ProfileIconId int, IN p_RevisionDate bigint,
+                                                             IN p_Level bigint, IN p_PlayerName varchar(50),
+                                                             IN p_PlatformId varchar(50))
+BEGIN
+    INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlayerName)
+    VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlayerName, p_PlatformId)
+    ON DUPLICATE KEY UPDATE Name          = IFNULL(Name, p_Name),
+                            AccountId     = IFNULL(AccountId, p_AccountId),
+                            ProfileIconId = IFNULL(ProfileIconId, p_ProfileIconId),
+                            RevisionDate  = IFNULL(RevisionDate, p_RevisionDate),
+                            Level         = IFNULL(Level, p_Level),
+                            PlayerName    = IFNULL(PlayerName, p_PlayerName),
+                            PlatformId    = IFNULL(PlatformId, p_PlatformId);
+END;
+
