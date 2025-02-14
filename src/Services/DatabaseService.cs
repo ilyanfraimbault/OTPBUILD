@@ -2,6 +2,7 @@ using System.Data;
 using Camille.Enums;
 using Camille.RiotGames.AccountV1;
 using Camille.RiotGames.MatchV5;
+using Camille.RiotGames.SummonerV4;
 using MySql.Data.MySqlClient;
 using OTPBUILD.Configurations;
 using OTPBUILD.Models;
@@ -23,7 +24,8 @@ public class DatabaseService
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var query = "CALL insertGame(@GameId, @GameDuration, @GameStartTimestamp, @GameVersion, @GameType, @PlatformId, @Winner, @MatchId)";
+        var query =
+            "CALL insertGame(@GameId, @GameDuration, @GameStartTimestamp, @GameVersion, @GameType, @PlatformId, @Winner, @MatchId)";
 
         using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@GameId", game.GameId);
@@ -53,6 +55,27 @@ public class DatabaseService
         command.Parameters.AddWithValue("@Puuid", account.Puuid);
         command.Parameters.AddWithValue("@GameName", account.GameName);
         command.Parameters.AddWithValue("@TagLine", account.TagLine);
+
+        return command.ExecuteNonQuery();
+    }
+
+    public int InsertSummoner(Summoner summoner, PlatformRoute platformRoute, string? playerName = null)
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query =
+            "CALL insertSummoner(@SummonerId, @Puuid, @Name, @AccountId, @ProfileIconId, @RevisionDate, @SummonerLevel, @PlayerName, @PlatformId)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@SummonerId", summoner.Id);
+        command.Parameters.AddWithValue("@Puuid", summoner.Puuid);
+        command.Parameters.AddWithValue("@Name", DBNull.Value);
+        command.Parameters.AddWithValue("@AccountId", summoner.AccountId);
+        command.Parameters.AddWithValue("@ProfileIconId", summoner.ProfileIconId);
+        command.Parameters.AddWithValue("@RevisionDate", summoner.RevisionDate);
+        command.Parameters.AddWithValue("@SummonerLevel", summoner.SummonerLevel);
+        command.Parameters.AddWithValue("@PlayerName", playerName);
+        command.Parameters.AddWithValue("@PlatformId", platformRoute);
 
         return command.ExecuteNonQuery();
     }
@@ -149,13 +172,15 @@ public class DatabaseService
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
 
-        var query = "CALL insertPerksStyle(@Description, @Style, @StyleSelection1, @StyleSelection2, @StyleSelection3, @StyleSelection4, @Id)";
+        var query =
+            "CALL insertPerksStyle(@Description, @Style, @StyleSelection1, @StyleSelection2, @StyleSelection3, @StyleSelection4, @Id)";
         using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@Description", style.Description);
         command.Parameters.AddWithValue("@Style", style.Style);
         for (var i = 0; i < 4; i++)
         {
-            command.Parameters.AddWithValue($"@StyleSelection{i + 1}", styleSelectionIds.Count > i ? styleSelectionIds[i] : DBNull.Value);
+            command.Parameters.AddWithValue($"@StyleSelection{i + 1}",
+                styleSelectionIds.Count > i ? styleSelectionIds[i] : DBNull.Value);
         }
 
         var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
@@ -205,9 +230,17 @@ public class DatabaseService
         command.Parameters.AddWithValue("@PlayerName", player.Name);
         command.Parameters.AddWithValue("@TwitchChannel", player.TwitchChannel);
 
-        return command.ExecuteNonQuery() + player.Champions.Sum(
+        var res = command.ExecuteNonQuery();
+        res += player.Champions.Sum(
             champion => InsertPlayerChampion(player, champion.Key, champion.Value)
-            );
+        );
+
+        foreach (var (platform, summoners) in player.Summoners)
+        {
+            res += summoners.Sum(summoner => InsertSummoner(summoner, platform));
+        }
+
+        return res;
     }
 
     private int InsertPlayerChampion(Player player, Champion champion, double playRate)
@@ -372,8 +405,32 @@ public class DatabaseService
             player ??= new Player(reader.GetString("PlayerName"), reader.GetString("TwitchChannel"));
             var champion = (Champion)Enum.Parse(typeof(Champion), reader.GetInt32("Champion").ToString());
             player.Champions.Add(champion, reader.GetDouble("PlayRate"));
-        }
+        } // TODO : Add summoners
 
         return player;
+    }
+
+    public List<Game> GetPlayerGames(string playerName, Champion? champion = null)
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "CALL getPlayerGamesIds(@PlayerName, @Champion)";
+        using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@PlayerName", playerName);
+        command.Parameters.AddWithValue("@Champion", champion != null ? (int)champion.Value : DBNull.Value);
+
+        using var reader = command.ExecuteReader();
+
+        List<Game> games = new List<Game>();
+        if (!reader.HasRows) return games;
+
+        while (reader.Read())
+        {
+            var game = GetGame(reader.GetInt64("GameId"));
+            if (game != null) games.Add(game);
+        }
+
+        return games;
     }
 }
