@@ -33,7 +33,7 @@ public class DatabaseService
         command.Parameters.AddWithValue("@GameStartTimestamp", game.GameStartTimestamp);
         command.Parameters.AddWithValue("@GameVersion", game.GameVersion);
         command.Parameters.AddWithValue("@GameType", game.GameType);
-        command.Parameters.AddWithValue("@PlatformId", game.PlatformId);
+        command.Parameters.AddWithValue("@PlatformId", game.PlatformRoute);
         command.Parameters.AddWithValue("@Winner", game.Winner);
         command.Parameters.AddWithValue("@MatchId", game.MatchId);
         var result = command.ExecuteNonQuery();
@@ -75,8 +75,7 @@ public class DatabaseService
         command.Parameters.AddWithValue("@RevisionDate", summoner.RevisionDate);
         command.Parameters.AddWithValue("@SummonerLevel", summoner.SummonerLevel);
         command.Parameters.AddWithValue("@PlayerName", playerName);
-        command.Parameters.AddWithValue("@PlatformId", platformRoute);
-
+        command.Parameters.AddWithValue("@PlatformId", platformRoute.ToString());
         return command.ExecuteNonQuery();
     }
 
@@ -110,7 +109,7 @@ public class DatabaseService
         participantCommand.Parameters.AddWithValue("@SummonerSpell2", participant.SummonerSpells.Item2);
         participantCommand.Parameters.AddWithValue("@Perks", perksId);
         participantCommand.Parameters.AddWithValue("@TeamPosition", participant.TeamPosition);
-        participantCommand.Parameters.AddWithValue("@PlatformId", game.PlatformId);
+        participantCommand.Parameters.AddWithValue("@PlatformId", game.PlatformRoute);
 
         return participantCommand.ExecuteNonQuery();
     }
@@ -278,7 +277,7 @@ public class DatabaseService
                 reader.GetString("GameVersion"),
                 Enum.Parse<GameType>(reader.GetString("GameType")),
                 reader.GetString("MatchId"),
-                reader.GetString("PlatformId"),
+                Enum.Parse<PlatformRoute>(reader.GetString("PlatformId")),
                 Enum.Parse<Team>(reader.GetInt32("Winner").ToString()),
                 []
             );
@@ -387,6 +386,26 @@ public class DatabaseService
         return game;
     }
 
+    public List<(string, PlatformRoute)> GetMatchIds()
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "SELECT MatchId, PlatformId FROM Games";
+        using var command = new MySqlCommand(query, connection);
+
+        using var reader = command.ExecuteReader();
+        List<(string, PlatformRoute)> matchIds = [];
+        while (reader.Read())
+        {
+            var id = reader.GetString("MatchId");
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            matchIds.Add((id, platform));
+        }
+
+        return matchIds;
+    }
+
     public Player? GetPlayer(string playerName)
     {
         using var connection = _databaseConfig.GetConnection();
@@ -432,5 +451,37 @@ public class DatabaseService
         }
 
         return games;
+    }
+
+    public List<(Summoner, PlatformRoute)> GetSummoners()
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "SELECT * FROM Summoners";
+        using var command = new MySqlCommand(query, connection);
+
+        using var reader = command.ExecuteReader();
+
+        List<(Summoner, PlatformRoute)> summoners = [];
+        if (!reader.HasRows) return summoners;
+
+        while (reader.Read())
+        {
+            var summoner = new Summoner
+            {
+                SummonerLevel = reader.IsDBNull(reader.GetOrdinal("Level")) ? 0 : reader.GetInt32("Level"),
+                Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString("Id"),
+                RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate")) ? 0 : reader.GetInt64("RevisionDate"),
+                Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid")) ? string.Empty : reader.GetString("Puuid"),
+                ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId")) ? 0 : reader.GetInt32("ProfileIconId"),
+                AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId")) ? string.Empty : reader.GetString("AccountId")
+            };
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+
+            summoners.Add((summoner, platform));
+        }
+
+        return summoners;
     }
 }
