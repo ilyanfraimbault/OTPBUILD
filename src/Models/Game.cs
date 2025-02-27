@@ -14,7 +14,7 @@ public class Game
     public GameType GameType { get; }
 
     public string MatchId { get; }
-    public string PlatformId { get; }
+    public PlatformRoute PlatformRoute { get; }
 
     public Team Winner { get; }
     public List<GameParticipant> Participants { get; }
@@ -28,7 +28,7 @@ public class Game
         GameType = match.Info.GameType;
 
         MatchId = match.Metadata.MatchId;
-        PlatformId = match.Info.PlatformId;
+        PlatformRoute = Enum.Parse<PlatformRoute>(match.Info.PlatformId);
 
         Winner = match.Info.Teams.First(team => team.Win).TeamId;
         Participants = match.Info.Participants.Select(participant => new GameParticipant(participant)).ToList();
@@ -36,7 +36,7 @@ public class Game
 
     public Game(
         long gameDuration, long gameStartTimestamp, long gameId, string gameVersion, GameType gameType, string matchId,
-        string platformId, Team winner, List<GameParticipant> participants
+        PlatformRoute platformRoute, Team winner, List<GameParticipant> participants
         )
     {
         GameDuration = gameDuration;
@@ -45,7 +45,7 @@ public class Game
         GameVersion = gameVersion;
         GameType = gameType;
         MatchId = matchId;
-        PlatformId = platformId;
+        PlatformRoute = platformRoute;
         Winner = winner;
         Participants = participants;
     }
