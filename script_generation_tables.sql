@@ -169,8 +169,7 @@ create index SummonerPuuid
 create index PlayerName
     on Summoners (PlayerName);
 
-create
-    definer = fraimbaulti@localhost procedure getGame(IN game_id bigint)
+create procedure getGame(IN game_id bigint)
 BEGIN
     SELECT GameDuration,
            GameStartTimestamp,
@@ -178,7 +177,7 @@ BEGIN
            GameVersion,
            GameType,
            MatchId,
-           PlatformId,
+           S.PlatformId,
            Winner,
            SummonerPuuid,
            S.Id                           AS SummonerId,
@@ -259,20 +258,16 @@ BEGIN
     WHERE G.GameId = game_id;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertAccount(IN p_Puuid varchar(78), IN p_GameName varchar(50),
-                                                            IN p_TagLine varchar(50))
+create procedure insertAccount(IN p_Puuid varchar(78), IN p_GameName varchar(50), IN p_TagLine varchar(50))
 BEGIN
     INSERT INTO Accounts (Puuid, GameName, TagLine)
     VALUES (p_Puuid, p_GameName, p_TagLine)
     ON DUPLICATE KEY UPDATE GameName = p_GameName, TagLine = p_TagLine;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertGame(IN p_GameId bigint, IN p_GameDuration int,
-                                                         IN p_GameStartTimestamp bigint, IN p_GameVersion varchar(50),
-                                                         IN p_GameType varchar(50), IN p_PlatformId varchar(10),
-                                                         IN p_Winner int, IN p_MatchId varchar(50))
+create procedure insertGame(IN p_GameId bigint, IN p_GameDuration int, IN p_GameStartTimestamp bigint,
+                            IN p_GameVersion varchar(50), IN p_GameType varchar(50), IN p_PlatformId varchar(10),
+                            IN p_Winner int, IN p_MatchId varchar(50))
 BEGIN
     INSERT INTO Games
     VALUES (p_GameDuration, p_GameStartTimestamp, p_GameId, p_GameVersion, p_GameType, p_MatchId, p_PlatformId,
@@ -286,19 +281,13 @@ BEGIN
                             Winner             = p_Winner;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertParticipant(IN p_GameId bigint, IN p_SummonerPuuid varchar(78),
-                                                                IN p_SummonerId varchar(63), IN p_GameName varchar(50),
-                                                                IN p_TagLine varchar(50), IN p_Champion int,
-                                                                IN p_TeamId int, IN p_Kills int, IN p_Deaths int,
-                                                                IN p_Assists int, IN p_Item0 int, IN p_Item1 int,
-                                                                IN p_Item2 int, IN p_Item3 int, IN p_Item4 int,
-                                                                IN p_Item5 int, IN p_Item6 int, IN p_SpellCast1 int,
-                                                                IN p_SpellCast2 int, IN p_SpellCast3 int,
-                                                                IN p_SpellCast4 int, IN p_SummonerSpell1 int,
-                                                                IN p_SummonerSpell2 int, IN p_Perks int,
-                                                                IN p_TeamPosition varchar(10),
-                                                                IN p_PlatformId varchar(10))
+create procedure insertParticipant(IN p_GameId bigint, IN p_SummonerPuuid varchar(78), IN p_SummonerId varchar(63),
+                                   IN p_GameName varchar(50), IN p_TagLine varchar(50), IN p_Champion int,
+                                   IN p_TeamId int, IN p_Kills int, IN p_Deaths int, IN p_Assists int, IN p_Item0 int,
+                                   IN p_Item1 int, IN p_Item2 int, IN p_Item3 int, IN p_Item4 int, IN p_Item5 int,
+                                   IN p_Item6 int, IN p_SpellCast1 int, IN p_SpellCast2 int, IN p_SpellCast3 int,
+                                   IN p_SpellCast4 int, IN p_SummonerSpell1 int, IN p_SummonerSpell2 int,
+                                   IN p_Perks int, IN p_TeamPosition varchar(10), IN p_PlatformId varchar(10))
 BEGIN
     CALL insertAccount(p_SummonerPuuid, p_GameName, p_TagLine);
     CALL insertSummoner(p_SummonerId, p_SummonerPuuid, p_GameName,
@@ -308,13 +297,11 @@ BEGIN
     VALUES (p_GameId, p_SummonerPuuid, p_Champion, p_TeamId, p_Kills, p_Deaths, p_Assists,
             p_Item0, p_Item1, p_Item2, p_Item3, p_Item4, p_Item5, p_Item6,
             p_SpellCast1, p_SpellCast2, p_SpellCast3, p_SpellCast4,
-            p_SummonerSpell1, p_SummonerSpell2, p_Perks, p_TeamPosition, p_PlatformId)
-    ON DUPLICATE KEY UPDATE p_GameId = p_GameId;
+            p_SummonerSpell1, p_SummonerSpell2, p_Perks, p_TeamPosition)
+    ON DUPLICATE KEY UPDATE GameId = p_GameId;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertPerks(IN p_StatPerks int, IN p_PrimaryStyle int,
-                                                          IN p_SecondaryStyle int, OUT p_Id int)
+create procedure insertPerks(IN p_StatPerks int, IN p_PrimaryStyle int, IN p_SecondaryStyle int, OUT p_Id int)
 BEGIN
     SELECT id
     INTO p_Id
@@ -330,11 +317,9 @@ BEGIN
     END IF;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertPerksStyle(IN p_Description varchar(50), IN p_Style int,
-                                                               IN p_StyleSelection1 int, IN p_StyleSelection2 int,
-                                                               IN p_StyleSelection3 int, IN p_StyleSelection4 int,
-                                                               OUT p_Id int)
+create procedure insertPerksStyle(IN p_Description varchar(50), IN p_Style int, IN p_StyleSelection1 int,
+                                  IN p_StyleSelection2 int, IN p_StyleSelection3 int, IN p_StyleSelection4 int,
+                                  OUT p_Id int)
 BEGIN
     SELECT id
     INTO p_Id
@@ -353,8 +338,7 @@ BEGIN
     END IF;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertPlayer(IN p_PlayerName varchar(50), IN p_TwitchChannel varchar(50))
+create procedure insertPlayer(IN p_PlayerName varchar(50), IN p_TwitchChannel varchar(50))
 BEGIN
     INSERT INTO Players (PlayerName, TwitchChannel)
     VALUES (p_PlayerName, p_TwitchChannel)
@@ -362,8 +346,7 @@ BEGIN
         TwitchChannel = VALUES(TwitchChannel);
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertPlayerChampion(IN p_PlayerName varchar(50), IN p_Champion int, IN p_PlayRate float)
+create procedure insertPlayerChampion(IN p_PlayerName varchar(50), IN p_Champion int, IN p_PlayRate float)
 BEGIN
     INSERT INTO PlayerChampions (PlayerName, Champion, PlayRate)
     VALUES (p_PlayerName, p_Champion, p_PlayRate)
@@ -371,8 +354,7 @@ BEGIN
         PlayRate = IFNULL(PlayRate, p_PlayRate);
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertStatPerks(IN p_Defense int, IN p_Flex int, IN p_Offense int, OUT p_Id int)
+create procedure insertStatPerks(IN p_Defense int, IN p_Flex int, IN p_Offense int, OUT p_Id int)
 BEGIN
     SELECT id
     INTO p_Id
@@ -388,8 +370,7 @@ BEGIN
     END IF;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertStyleSelection(IN p_Perk int, IN p_Var1 int, IN p_Var2 int, IN p_Var3 int, OUT p_Id int)
+create procedure insertStyleSelection(IN p_Perk int, IN p_Var1 int, IN p_Var2 int, IN p_Var3 int, OUT p_Id int)
 BEGIN
     SELECT id
     INTO p_Id
@@ -406,14 +387,11 @@ BEGIN
     END IF;
 END;
 
-create
-    definer = fraimbaulti@localhost procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78),
-                                                             IN p_Name varchar(50), IN p_AccountId varchar(56),
-                                                             IN p_ProfileIconId int, IN p_RevisionDate bigint,
-                                                             IN p_Level bigint, IN p_PlayerName varchar(50),
-                                                             IN p_PlatformId varchar(50))
+create procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78), IN p_Name varchar(50),
+                                IN p_AccountId varchar(56), IN p_ProfileIconId int, IN p_RevisionDate bigint,
+                                IN p_Level bigint, IN p_PlayerName varchar(50), IN p_PlatformId varchar(50))
 BEGIN
-    INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlayerName)
+    INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlayerName, PlatformId)
     VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlayerName, p_PlatformId)
     ON DUPLICATE KEY UPDATE Name          = IFNULL(Name, p_Name),
                             AccountId     = IFNULL(AccountId, p_AccountId),
@@ -423,4 +401,5 @@ BEGIN
                             PlayerName    = IFNULL(PlayerName, p_PlayerName),
                             PlatformId    = IFNULL(PlatformId, p_PlatformId);
 END;
+
 
