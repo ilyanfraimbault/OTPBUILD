@@ -3,12 +3,13 @@ using Camille.RiotGames;
 using Camille.RiotGames.ChampionMasteryV4;
 using Camille.RiotGames.LeagueV4;
 using Camille.RiotGames.SummonerV4;
+using OTPBUILD.Models;
 
 namespace OTPBUILD.Services;
 
 public class FetchOtps(RiotGamesApi riotApi)
 {
-    public Dictionary<PlatformRoute, List<Summoner>> Mains { get; } = new();
+    public Dictionary<PlatformRoute, List<Player>> Players { get; } = new();
     public List<Champion> Champions { get; } = [];
     public List<PlatformRoute> PlatformRoutes { get; } = [];
     public Dictionary<Summoner, ChampionMastery[]> ChampionMasteries { get; } = new();
@@ -20,22 +21,23 @@ public class FetchOtps(RiotGamesApi riotApi)
         PlatformRoutes = platformRoutes;
     }
 
-    public int FindMains()
+    public int FindPlayers()
     {
         var count = 0;
         foreach (var platform in PlatformRoutes)
         {
-            List<Summoner> list = [];
+            List<Player> list = [];
 
             foreach (var champion in Champions)
             {
                 foreach (var summoner in ChampionMasteries.Keys.Where(summoner => IsMain(summoner, champion)))
                 {
-                    list.Add(summoner);
+                    var player = new Player(summoner, champion);
+                    list.Add(player);
                     count++;
                 }
             }
-            Mains.Add(platform, list);
+            Players.Add(platform, list);
         }
 
         return count;
@@ -59,9 +61,16 @@ public class FetchOtps(RiotGamesApi riotApi)
 
         foreach (var platform in PlatformRoutes)
         {
-            Console.WriteLine(platform);
-            var leagueEntries = GetEntries(platform);
-            Console.WriteLine("total entries: " + leagueEntries.Count);
+            List<LeagueItem> leagueEntries = [];
+
+            try
+            {
+                leagueEntries = GetEntries(platform);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error while fetching entries");
+            }
 
             if (summonerIds is not null)
                 leagueEntries = leagueEntries
@@ -74,15 +83,21 @@ public class FetchOtps(RiotGamesApi riotApi)
                     .ToList();
 
             if (limit is not null) leagueEntries = leagueEntries.Take(limit.Value).ToList();
-            Console.WriteLine("filtered entries: " + leagueEntries.Count);
+            Console.WriteLine($"Platform: {platform} total entries: {leagueEntries.Count}");
 
             entries.Add(platform, leagueEntries);
         }
 
+        Console.WriteLine("Starting to fetch summoners...");
+        var countPlatform = 0;
         foreach (var (platform, platformEntries) in entries)
         {
+            countPlatform++;
+            var countLeagueItem = 0;
             foreach (var leagueItem in platformEntries)
             {
+                countLeagueItem++;
+                Console.WriteLine($"Platform: {countPlatform}/{entries.Count} leagueItem: {countLeagueItem}/{platformEntries.Count}");
                 try
                 {
                     var summoner = riotApi.SummonerV4().GetBySummonerId(platform, leagueItem.SummonerId);
@@ -98,11 +113,11 @@ public class FetchOtps(RiotGamesApi riotApi)
         }
     }
 
-    public bool IsMain(Summoner summoner, Champion champion)
+    private bool IsMain(Summoner summoner, Champion champion)
     {
         var championMasteries = ChampionMasteries[summoner].FirstOrDefault(mastery => mastery.ChampionId == champion);
         if (championMasteries is null) return false;
         var lastPlayTime = DateTimeOffset.FromUnixTimeMilliseconds(championMasteries.LastPlayTime);
-        return championMasteries.ChampionPoints > 100000 && lastPlayTime > DateTimeOffset.Now.AddDays(-7);
+        return championMasteries.ChampionPoints > 300000 && lastPlayTime > DateTimeOffset.Now.AddDays(-7);
     }
 }

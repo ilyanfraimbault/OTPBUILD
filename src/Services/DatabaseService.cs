@@ -10,18 +10,11 @@ using Team = Camille.RiotGames.Enums.Team;
 
 namespace OTPBUILD.Services;
 
-public class DatabaseService
+public class DatabaseService(DatabaseConfig databaseConfig)
 {
-    private readonly DatabaseConfig _databaseConfig;
-
-    public DatabaseService(DatabaseConfig databaseConfig)
-    {
-        _databaseConfig = databaseConfig;
-    }
-
     public int InsertGame(Game game)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query =
@@ -47,7 +40,7 @@ public class DatabaseService
 
     public int InsertAccount(Account account)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "CALL insertAccount(@Puuid, @GameName, @TagLine)";
@@ -61,7 +54,7 @@ public class DatabaseService
 
     public int InsertSummoner(Summoner summoner, PlatformRoute platformRoute, string? playerName = null)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query =
@@ -83,7 +76,7 @@ public class DatabaseService
     {
         var perksId = InsertPerks(participant.Perks);
 
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var participantQuery =
@@ -116,7 +109,7 @@ public class DatabaseService
 
     public int InsertStatPerks(PerkStats stats)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "CALL insertStatPerks(@Defense, @Flex, @Offense, @Id)";
@@ -138,7 +131,7 @@ public class DatabaseService
 
     private int InsertStyleSelection(PerkStyleSelection styleSelection)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "CALL insertStyleSelection(@Perk, @Var1, @Var2, @Var3, @Id)";
@@ -166,7 +159,7 @@ public class DatabaseService
         foreach (var perkStyleSelection in style.Selections)
             styleSelectionIds.Add(InsertStyleSelection(perkStyleSelection));
 
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query =
@@ -195,7 +188,7 @@ public class DatabaseService
         var primaryStyleId = InsertPerksStyle(perks.Styles[0]);
         var secondaryStyleId = InsertPerksStyle(perks.Styles[1]);
 
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "CALL insertPerks(@StatPerks, @PrimaryStyle, @SecondaryStyle, @Id)";
@@ -217,42 +210,22 @@ public class DatabaseService
 
     public int InsertPlayer(Player player)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
-        var query = "CALL insertPlayer(@PlayerName, @TwitchChannel)";
+        var query = "CALL insertPlayer(@SummonerPuuid, @Champion)";
         using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@PlayerName", player.Name);
-        command.Parameters.AddWithValue("@TwitchChannel", player.TwitchChannel);
+        command.Parameters.AddWithValue("@SummonerPuuid", player.Summoner.Puuid);
+        command.Parameters.AddWithValue("@Champion", (int)player.Champion);
 
         var res = command.ExecuteNonQuery();
-        res += player.Champions.Sum(
-            champion => InsertPlayerChampion(player, champion.Key, champion.Value)
-        );
-
-        foreach (var (platform, summoners) in player.Summoners)
-            res += summoners.Sum(summoner => InsertSummoner(summoner, platform));
 
         return res;
     }
 
-    private int InsertPlayerChampion(Player player, Champion champion, double playRate)
-    {
-        using var connection = _databaseConfig.GetConnection();
-        connection.Open();
-
-        var query = "CALL insertPlayerChampion(@PlayerName, @Champion, @PlayRate)";
-        using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@PlayerName", player.Name);
-        command.Parameters.AddWithValue("@Champion", champion);
-        command.Parameters.AddWithValue("@PlayRate", playRate);
-
-        return command.ExecuteNonQuery();
-    }
-
     public Game? GetGame(long gameId)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "CALL GetGame(@GameId)";
@@ -262,127 +235,127 @@ public class DatabaseService
         using var reader = command.ExecuteReader();
         if (!reader.HasRows) return null;
         Game? game = null;
-        while (reader.Read())
+
+        reader.Read();
+
+        game ??= new Game(
+            reader.GetInt32("GameDuration"),
+            reader.GetInt64("GameStartTimestamp"),
+            reader.GetInt64("GameId"),
+            reader.GetString("GameVersion"),
+            Enum.Parse<GameType>(reader.GetString("GameType")),
+            reader.GetString("MatchId"),
+            Enum.Parse<PlatformRoute>(reader.GetString("PlatformId")),
+            Enum.Parse<Team>(reader.GetInt32("Winner").ToString()),
+            []
+        );
+
+        var perkStats = new PerkStats
         {
-            game ??= new Game(
-                reader.GetInt32("GameDuration"),
-                reader.GetInt64("GameStartTimestamp"),
-                reader.GetInt64("GameId"),
-                reader.GetString("GameVersion"),
-                Enum.Parse<GameType>(reader.GetString("GameType")),
-                reader.GetString("MatchId"),
-                Enum.Parse<PlatformRoute>(reader.GetString("PlatformId")),
-                Enum.Parse<Team>(reader.GetInt32("Winner").ToString()),
-                []
-            );
+            Defense = reader.GetInt32("defense"),
+            Flex = reader.GetInt32("flex"),
+            Offense = reader.GetInt32("offense")
+        };
 
-            var perkStats = new PerkStats
-            {
-                Defense = reader.GetInt32("defense"),
-                Flex = reader.GetInt32("flex"),
-                Offense = reader.GetInt32("offense")
-            };
+        var primaryStyle = new PerkStyle
+        {
+            Style = reader.GetInt32("primaryStyle"),
+            Description = reader.GetString("primaryStyleDescription"),
+            Selections =
+            [
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection1"),
+                    Var1 = reader.GetInt32("primStyleSelection1Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection1Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection1Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection2"),
+                    Var1 = reader.GetInt32("primStyleSelection2Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection2Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection2Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection3"),
+                    Var1 = reader.GetInt32("primStyleSelection3Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection3Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection3Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection4"),
+                    Var1 = reader.GetInt32("primStyleSelection4Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection4Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection4Var3")
+                }
+            ]
+        };
 
-            var primaryStyle = new PerkStyle
-            {
-                Style = reader.GetInt32("primaryStyle"),
-                Description = reader.GetString("primaryStyleDescription"),
-                Selections =
-                [
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection1"),
-                        Var1 = reader.GetInt32("primStyleSelection1Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection1Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection1Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection2"),
-                        Var1 = reader.GetInt32("primStyleSelection2Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection2Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection2Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection3"),
-                        Var1 = reader.GetInt32("primStyleSelection3Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection3Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection3Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection4"),
-                        Var1 = reader.GetInt32("primStyleSelection4Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection4Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection4Var3")
-                    }
-                ]
-            };
+        var secondaryStyle = new PerkStyle
+        {
+            Style = reader.GetInt32("secondaryStyle"),
+            Description = reader.GetString("secondaryStyleDescription"),
+            Selections =
+            [
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("secStyleSelection1"),
+                    Var1 = reader.GetInt32("secStyleSelection1Var1"),
+                    Var2 = reader.GetInt32("secStyleSelection1Var2"),
+                    Var3 = reader.GetInt32("secStyleSelection1Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("secStyleSelection2"),
+                    Var1 = reader.GetInt32("secStyleSelection2Var1"),
+                    Var2 = reader.GetInt32("secStyleSelection2Var2"),
+                    Var3 = reader.GetInt32("secStyleSelection2Var3")
+                }
+            ]
+        };
 
-            var secondaryStyle = new PerkStyle
-            {
-                Style = reader.GetInt32("secondaryStyle"),
-                Description = reader.GetString("secondaryStyleDescription"),
-                Selections =
-                [
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("secStyleSelection1"),
-                        Var1 = reader.GetInt32("secStyleSelection1Var1"),
-                        Var2 = reader.GetInt32("secStyleSelection1Var2"),
-                        Var3 = reader.GetInt32("secStyleSelection1Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("secStyleSelection2"),
-                        Var1 = reader.GetInt32("secStyleSelection2Var1"),
-                        Var2 = reader.GetInt32("secStyleSelection2Var2"),
-                        Var3 = reader.GetInt32("secStyleSelection2Var3")
-                    }
-                ]
-            };
+        var perks = new Perks
+        {
+            StatPerks = perkStats,
+            Styles = [primaryStyle, secondaryStyle]
+        };
 
-            var perks = new Perks
-            {
-                StatPerks = perkStats,
-                Styles = [primaryStyle, secondaryStyle]
-            };
-
-            var participant = new GameParticipant(
-                reader.GetString("SummonerName"),
-                reader.GetString("SummonerId"),
-                reader.GetInt32("SummonerLevel"),
-                reader.GetString("SummonerPuuid"),
-                Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
-                Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
-                reader.GetString("TeamPosition"),
-                reader.GetInt32("Kills"),
-                reader.GetInt32("Deaths"),
-                reader.GetInt32("Assists"),
-                [
-                    reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
-                    reader.GetInt32("Item3"),
-                    reader.GetInt32("Item4"), reader.GetInt32("Item5"), reader.GetInt32("Item6")
-                ],
-                [
-                    reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
-                    reader.GetInt32("SpellCast4")
-                ],
-                (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
-                perks,
-                reader.GetString("GameName"),
-                reader.GetString("TagLine")
-            );
-            game.Participants.Add(participant);
-        }
+        var participant = new GameParticipant(
+            reader.GetString("SummonerName"),
+            reader.GetString("SummonerId"),
+            reader.GetInt32("SummonerLevel"),
+            reader.GetString("SummonerPuuid"),
+            Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
+            Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
+            reader.GetString("TeamPosition"),
+            reader.GetInt32("Kills"),
+            reader.GetInt32("Deaths"),
+            reader.GetInt32("Assists"),
+            [
+                reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
+                reader.GetInt32("Item3"),
+                reader.GetInt32("Item4"), reader.GetInt32("Item5"), reader.GetInt32("Item6")
+            ],
+            [
+                reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
+                reader.GetInt32("SpellCast4")
+            ],
+            (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
+            perks,
+            reader.GetString("GameName"),
+            reader.GetString("TagLine")
+        );
+        game.Participants.Add(participant);
 
         return game;
     }
 
     public List<(string, PlatformRoute)> GetMatchIds()
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "SELECT MatchId, PlatformId FROM Games";
@@ -400,32 +373,57 @@ public class DatabaseService
         return matchIds;
     }
 
-    public Player? GetPlayer(string playerName)
+    public Player? GetPlayer(string summonerPuuid)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
-        var query = "CALL GetPlayer(@PlayerName)";
+        var query =
+            "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = @SummonerPuuid";
         using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@PlayerName", playerName);
+        command.Parameters.AddWithValue("@SummonerPuuid", summonerPuuid);
 
         using var reader = command.ExecuteReader();
         if (!reader.HasRows) return null;
 
-        Player? player = null;
+        reader.Read();
+        var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
+        var summoner = CreateSummonerFromReader(reader);
+
+        return new Player(summoner, champion);
+    }
+
+    public Dictionary<PlatformRoute, List<Player>> GetPlayers()
+    {
+        using var connection = databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid";
+        using var command = new MySqlCommand(query, connection);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.HasRows) return [];
+
+        var players = new Dictionary<PlatformRoute, List<Player>>();
+
         while (reader.Read())
         {
-            player ??= new Player(reader.GetString("PlayerName"), reader.GetString("TwitchChannel"));
-            var champion = (Champion)Enum.Parse(typeof(Champion), reader.GetInt32("Champion").ToString());
-            player.Champions.Add(champion, reader.GetDouble("PlayRate"));
-        } // TODO : Add summoners
+            var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
+            var summoner = CreateSummonerFromReader(reader);
 
-        return player;
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+
+            if (!players.ContainsKey(platform)) players[platform] = [];
+
+            players[platform].Add(new Player(summoner, champion));
+        }
+
+        return players;
     }
 
     public List<Game> GetPlayerGames(string playerName, Champion? champion = null)
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "CALL getPlayerGamesIds(@PlayerName, @Champion)";
@@ -449,7 +447,7 @@ public class DatabaseService
 
     public List<(Summoner, PlatformRoute)> GetSummoners()
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "SELECT * FROM Summoners";
@@ -462,19 +460,7 @@ public class DatabaseService
 
         while (reader.Read())
         {
-            var summoner = new Summoner
-            {
-                SummonerLevel = reader.IsDBNull(reader.GetOrdinal("Level")) ? 0 : reader.GetInt32("Level"),
-                Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString("Id"),
-                RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate")) ? 0 : reader.GetInt64("RevisionDate"),
-                Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid")) ? string.Empty : reader.GetString("Puuid"),
-                ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId"))
-                    ? 0
-                    : reader.GetInt32("ProfileIconId"),
-                AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId"))
-                    ? string.Empty
-                    : reader.GetString("AccountId")
-            };
+            var summoner = CreateSummonerFromReader(reader);
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
 
             summoners.Add((summoner, platform));
@@ -485,7 +471,7 @@ public class DatabaseService
 
     public List<(Summoner, PlatformRoute)> GetSummonerIdsOrderedByGamesPlayed()
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = @"
@@ -503,19 +489,7 @@ public class DatabaseService
 
         while (reader.Read())
         {
-            var summoner = new Summoner
-            {
-                SummonerLevel = reader.IsDBNull(reader.GetOrdinal("Level")) ? 0 : reader.GetInt32("Level"),
-                Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString("Id"),
-                RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate")) ? 0 : reader.GetInt64("RevisionDate"),
-                Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid")) ? string.Empty : reader.GetString("Puuid"),
-                ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId"))
-                    ? 0
-                    : reader.GetInt32("ProfileIconId"),
-                AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId"))
-                    ? string.Empty
-                    : reader.GetString("AccountId")
-            };
+            var summoner = CreateSummonerFromReader(reader);
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
 
             summoners.Add((summoner, platform));
@@ -526,7 +500,7 @@ public class DatabaseService
 
     public List<string> GetSummonerIds()
     {
-        using var connection = _databaseConfig.GetConnection();
+        using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query = "SELECT Id FROM Summoners";
@@ -538,5 +512,18 @@ public class DatabaseService
         while (reader.Read()) summonerIds.Add(reader.GetString("Id"));
 
         return summonerIds;
+    }
+
+    private Summoner CreateSummonerFromReader(MySqlDataReader reader)
+    {
+        return new Summoner
+        {
+            SummonerLevel = reader.IsDBNull(reader.GetOrdinal("Level")) ? 0 : reader.GetInt32("Level"),
+            Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString("Id"),
+            RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate")) ? 0 : reader.GetInt64("RevisionDate"),
+            Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid")) ? string.Empty : reader.GetString("Puuid"),
+            ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId")) ? 0 : reader.GetInt32("ProfileIconId"),
+            AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId")) ? string.Empty : reader.GetString("AccountId")
+        };
     }
 }
