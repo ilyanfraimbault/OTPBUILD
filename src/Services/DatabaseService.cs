@@ -101,9 +101,9 @@ public class DatabaseService
         participantCommand.Parameters.AddWithValue("@Kills", participant.Kills);
         participantCommand.Parameters.AddWithValue("@Deaths", participant.Deaths);
         participantCommand.Parameters.AddWithValue("@Assists", participant.Assists);
-        for (int i = 0; i < 7; i++)
+        for (var i = 0; i < 7; i++)
             participantCommand.Parameters.AddWithValue($"@Item{i}", participant.Items[i]);
-        for (int i = 0; i < 4; i++)
+        for (var i = 0; i < 4; i++)
             participantCommand.Parameters.AddWithValue($"@SpellCast{i + 1}", participant.SpellsCasts[i]);
         participantCommand.Parameters.AddWithValue("@SummonerSpell1", participant.SummonerSpells.Item1);
         participantCommand.Parameters.AddWithValue("@SummonerSpell2", participant.SummonerSpells.Item2);
@@ -161,12 +161,10 @@ public class DatabaseService
 
     private int InsertPerksStyle(PerkStyle style)
     {
-        List<int> styleSelectionIds = new List<int>();
+        var styleSelectionIds = new List<int>();
 
         foreach (var perkStyleSelection in style.Selections)
-        {
             styleSelectionIds.Add(InsertStyleSelection(perkStyleSelection));
-        }
 
         using var connection = _databaseConfig.GetConnection();
         connection.Open();
@@ -177,10 +175,8 @@ public class DatabaseService
         command.Parameters.AddWithValue("@Description", style.Description);
         command.Parameters.AddWithValue("@Style", style.Style);
         for (var i = 0; i < 4; i++)
-        {
             command.Parameters.AddWithValue($"@StyleSelection{i + 1}",
                 styleSelectionIds.Count > i ? styleSelectionIds[i] : DBNull.Value);
-        }
 
         var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
         {
@@ -235,9 +231,7 @@ public class DatabaseService
         );
 
         foreach (var (platform, summoners) in player.Summoners)
-        {
             res += summoners.Sum(summoner => InsertSummoner(summoner, platform));
-        }
 
         return res;
     }
@@ -282,14 +276,14 @@ public class DatabaseService
                 []
             );
 
-            PerkStats perkStats = new PerkStats
+            var perkStats = new PerkStats
             {
                 Defense = reader.GetInt32("defense"),
                 Flex = reader.GetInt32("flex"),
                 Offense = reader.GetInt32("offense")
             };
 
-            PerkStyle primaryStyle = new PerkStyle
+            var primaryStyle = new PerkStyle
             {
                 Style = reader.GetInt32("primaryStyle"),
                 Description = reader.GetString("primaryStyleDescription"),
@@ -326,7 +320,7 @@ public class DatabaseService
                 ]
             };
 
-            PerkStyle secondaryStyle = new PerkStyle
+            var secondaryStyle = new PerkStyle
             {
                 Style = reader.GetInt32("secondaryStyle"),
                 Description = reader.GetString("secondaryStyleDescription"),
@@ -349,13 +343,13 @@ public class DatabaseService
                 ]
             };
 
-            Perks perks = new Perks
+            var perks = new Perks
             {
                 StatPerks = perkStats,
                 Styles = [primaryStyle, secondaryStyle]
             };
 
-            GameParticipant participant = new GameParticipant(
+            var participant = new GameParticipant(
                 reader.GetString("SummonerName"),
                 reader.GetString("SummonerId"),
                 reader.GetInt32("SummonerLevel"),
@@ -441,7 +435,7 @@ public class DatabaseService
 
         using var reader = command.ExecuteReader();
 
-        List<Game> games = new List<Game>();
+        var games = new List<Game>();
         if (!reader.HasRows) return games;
 
         while (reader.Read())
@@ -474,8 +468,12 @@ public class DatabaseService
                 Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString("Id"),
                 RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate")) ? 0 : reader.GetInt64("RevisionDate"),
                 Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid")) ? string.Empty : reader.GetString("Puuid"),
-                ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId")) ? 0 : reader.GetInt32("ProfileIconId"),
-                AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId")) ? string.Empty : reader.GetString("AccountId")
+                ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId"))
+                    ? 0
+                    : reader.GetInt32("ProfileIconId"),
+                AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId"))
+                    ? string.Empty
+                    : reader.GetString("AccountId")
             };
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
 
@@ -483,5 +481,62 @@ public class DatabaseService
         }
 
         return summoners;
+    }
+
+    public List<(Summoner, PlatformRoute)> GetSummonerIdsOrderedByGamesPlayed()
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = @"
+            SELECT S.*
+            FROM Summoners S
+            LEFT JOIN Participants P on P.SummonerPuuid = S.Puuid
+            GROUP BY S.Puuid
+            ORDER BY COUNT(P.GameId)
+            ";
+
+        using var command = new MySqlCommand(query, connection);
+        using var reader = command.ExecuteReader();
+
+        var summoners = new List<(Summoner, PlatformRoute)>();
+
+        while (reader.Read())
+        {
+            var summoner = new Summoner
+            {
+                SummonerLevel = reader.IsDBNull(reader.GetOrdinal("Level")) ? 0 : reader.GetInt32("Level"),
+                Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString("Id"),
+                RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate")) ? 0 : reader.GetInt64("RevisionDate"),
+                Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid")) ? string.Empty : reader.GetString("Puuid"),
+                ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId"))
+                    ? 0
+                    : reader.GetInt32("ProfileIconId"),
+                AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId"))
+                    ? string.Empty
+                    : reader.GetString("AccountId")
+            };
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+
+            summoners.Add((summoner, platform));
+        }
+
+        return summoners;
+    }
+
+    public List<string> GetSummonerIds()
+    {
+        using var connection = _databaseConfig.GetConnection();
+        connection.Open();
+
+        var query = "SELECT Id FROM Summoners";
+        using var command = new MySqlCommand(query, connection);
+
+        using var reader = command.ExecuteReader();
+
+        List<string> summonerIds = [];
+        while (reader.Read()) summonerIds.Add(reader.GetString("Id"));
+
+        return summonerIds;
     }
 }
