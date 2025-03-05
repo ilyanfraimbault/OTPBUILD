@@ -52,13 +52,13 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         return command.ExecuteNonQuery();
     }
 
-    public int InsertSummoner(Summoner summoner, PlatformRoute platformRoute, string? playerName = null)
+    public int InsertSummoner(Summoner summoner, PlatformRoute platformRoute)
     {
         using var connection = databaseConfig.GetConnection();
         connection.Open();
 
         var query =
-            "CALL insertSummoner(@SummonerId, @Puuid, @Name, @AccountId, @ProfileIconId, @RevisionDate, @SummonerLevel, @PlayerName, @PlatformId)";
+            "CALL insertSummoner(@SummonerId, @Puuid, @Name, @AccountId, @ProfileIconId, @RevisionDate, @SummonerLevel, @PlatformId)";
         using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@SummonerId", summoner.Id);
         command.Parameters.AddWithValue("@Puuid", summoner.Puuid);
@@ -67,7 +67,6 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         command.Parameters.AddWithValue("@ProfileIconId", summoner.ProfileIconId);
         command.Parameters.AddWithValue("@RevisionDate", summoner.RevisionDate);
         command.Parameters.AddWithValue("@SummonerLevel", summoner.SummonerLevel);
-        command.Parameters.AddWithValue("@PlayerName", playerName);
         command.Parameters.AddWithValue("@PlatformId", platformRoute.ToString());
         return command.ExecuteNonQuery();
     }
@@ -398,7 +397,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         using var connection = databaseConfig.GetConnection();
         connection.Open();
 
-        var query = "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid";
+        var query = "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = '-FttafhQwv8kD1EYA-CMqU4tirIGr1BraH2BCSNT_TuyetnuJNN-uazUBB6PBqCrHN2j7R14zYy2Sg'";
         using var command = new MySqlCommand(query, connection);
 
         using var reader = command.ExecuteReader();
@@ -419,30 +418,6 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         }
 
         return players;
-    }
-
-    public List<Game> GetPlayerGames(string playerName, Champion? champion = null)
-    {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
-
-        var query = "CALL getPlayerGamesIds(@PlayerName, @Champion)";
-        using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@PlayerName", playerName);
-        command.Parameters.AddWithValue("@Champion", champion != null ? (int)champion.Value : DBNull.Value);
-
-        using var reader = command.ExecuteReader();
-
-        var games = new List<Game>();
-        if (!reader.HasRows) return games;
-
-        while (reader.Read())
-        {
-            var game = GetGame(reader.GetInt64("GameId"));
-            if (game != null) games.Add(game);
-        }
-
-        return games;
     }
 
     public List<(Summoner, PlatformRoute)> GetSummoners()
