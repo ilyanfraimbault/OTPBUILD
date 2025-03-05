@@ -53,15 +53,28 @@ public class FetchOtps(RiotGamesApi riotApi)
         return leagueEntriesList;
     }
 
-    public void SetSummoners(int? limit = null)
+    public void SetSummoners(int? limit = null, List<string>? summonerIds = null)
     {
         Dictionary<PlatformRoute, List<LeagueItem>> entries = [];
 
         foreach (var platform in PlatformRoutes)
         {
+            Console.WriteLine(platform);
             var leagueEntries = GetEntries(platform);
-            leagueEntries.Sort((a, b) => b.LeaguePoints.CompareTo(a.LeaguePoints));
+            Console.WriteLine("total entries: " + leagueEntries.Count);
+
+            if (summonerIds is not null)
+                leagueEntries = leagueEntries
+                    .Where(entry => !summonerIds.Contains(entry.SummonerId))
+                    .OrderByDescending(entry => entry.LeaguePoints)
+                    .ToList();
+            else
+                leagueEntries = leagueEntries
+                    .OrderByDescending(entry => entry.LeaguePoints)
+                    .ToList();
+
             if (limit is not null) leagueEntries = leagueEntries.Take(limit.Value).ToList();
+            Console.WriteLine("filtered entries: " + leagueEntries.Count);
 
             entries.Add(platform, leagueEntries);
         }
