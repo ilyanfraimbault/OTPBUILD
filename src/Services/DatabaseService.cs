@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using Camille.Enums;
 using Camille.RiotGames.AccountV1;
 using Camille.RiotGames.MatchV5;
@@ -12,10 +13,10 @@ namespace OTPBUILD.Services;
 
 public class DatabaseService(DatabaseConfig databaseConfig)
 {
-    public int InsertGame(Game game)
+    public async Task<int> InsertGameAsync(Game game)
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query =
             "CALL insertGame(@GameId, @GameDuration, @GameStartTimestamp, @GameVersion, @GameType, @PlatformId, @Winner, @MatchId)";
@@ -29,37 +30,37 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         command.Parameters.AddWithValue("@PlatformId", game.PlatformRoute);
         command.Parameters.AddWithValue("@Winner", game.Winner);
         command.Parameters.AddWithValue("@MatchId", game.MatchId);
-        var result = command.ExecuteNonQuery();
+        var result = await command.ExecuteNonQueryAsync();
 
         if (result <= 0) return result;
 
-        foreach (var participant in game.Participants) InsertParticipant(participant, game);
+        foreach (var participant in game.Participants) await InsertParticipantAsync(participant, game);
 
         return result;
     }
 
-    public int InsertAccount(Account account)
+    public async Task<int> InsertAccountAsync(Account account)
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query = "CALL insertAccount(@Puuid, @GameName, @TagLine)";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@Puuid", account.Puuid);
         command.Parameters.AddWithValue("@GameName", account.GameName);
         command.Parameters.AddWithValue("@TagLine", account.TagLine);
 
-        return command.ExecuteNonQuery();
+        return await command.ExecuteNonQueryAsync();
     }
 
-    public int InsertSummoner(Summoner summoner, PlatformRoute platformRoute)
+    public async Task<int> InsertSummonerAsync(Summoner summoner, PlatformRoute platformRoute)
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query =
             "CALL insertSummoner(@SummonerId, @Puuid, @Name, @AccountId, @ProfileIconId, @RevisionDate, @SummonerLevel, @PlatformId)";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@SummonerId", summoner.Id);
         command.Parameters.AddWithValue("@Puuid", summoner.Puuid);
         command.Parameters.AddWithValue("@Name", DBNull.Value);
@@ -68,21 +69,22 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         command.Parameters.AddWithValue("@RevisionDate", summoner.RevisionDate);
         command.Parameters.AddWithValue("@SummonerLevel", summoner.SummonerLevel);
         command.Parameters.AddWithValue("@PlatformId", platformRoute.ToString());
-        return command.ExecuteNonQuery();
+
+        return await command.ExecuteNonQueryAsync();
     }
 
-    public int InsertParticipant(GameParticipant participant, Game game)
+    public async Task<int> InsertParticipantAsync(GameParticipant participant, Game game)
     {
-        var perksId = InsertPerks(participant.Perks);
+        var perksId = await InsertPerksAsync(participant.Perks);
 
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var participantQuery =
             "CALL insertParticipant(@GameId, @SummonerPuuid, @SummonerId, @GameName, @TagLine, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
             "@Item0, @Item1, @Item2, @Item3, @Item4, @Item5, @Item6, " +
             "@SpellCast1, @SpellCast2, @SpellCast3, @SpellCast4, @SummonerSpell1, @SummonerSpell2, @Perks, @TeamPosition, @PlatformId)";
-        using var participantCommand = new MySqlCommand(participantQuery, connection);
+        await using var participantCommand = new MySqlCommand(participantQuery, connection);
         participantCommand.Parameters.AddWithValue("@GameId", game.GameId);
         participantCommand.Parameters.AddWithValue("@SummonerPuuid", participant.Puuid);
         participantCommand.Parameters.AddWithValue("@SummonerId", participant.SummonerId);
@@ -103,19 +105,23 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         participantCommand.Parameters.AddWithValue("@TeamPosition", participant.TeamPosition);
         participantCommand.Parameters.AddWithValue("@PlatformId", game.PlatformRoute);
 
-        return participantCommand.ExecuteNonQuery();
+        return await participantCommand.ExecuteNonQueryAsync();
     }
 
-    public int InsertStatPerks(PerkStats stats)
+    private async Task<int> InsertPerksAsync(Perks perks)
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        var statPerksId = await InsertStatPerksAsync(perks.StatPerks);
+        var primaryStyleId = await InsertPerksStyleAsync(perks.Styles[0]);
+        var secondaryStyleId = await InsertPerksStyleAsync(perks.Styles[1]);
 
-        var query = "CALL insertStatPerks(@Defense, @Flex, @Offense, @Id)";
-        using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Defense", stats.Defense);
-        command.Parameters.AddWithValue("@Flex", stats.Flex);
-        command.Parameters.AddWithValue("@Offense", stats.Offense);
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
+
+        var query = "CALL insertPerks(@StatPerks, @PrimaryStyle, @SecondaryStyle, @Id)";
+        await using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@StatPerks", statPerksId);
+        command.Parameters.AddWithValue("@PrimaryStyle", primaryStyleId);
+        command.Parameters.AddWithValue("@SecondaryStyle", secondaryStyleId);
 
         var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
         {
@@ -123,43 +129,20 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         };
         command.Parameters.Add(idParam);
 
-        command.ExecuteNonQuery();
+        await command.ExecuteNonQueryAsync();
 
         return (int)idParam.Value;
     }
 
-    private int InsertStyleSelection(PerkStyleSelection styleSelection)
-    {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
-
-        var query = "CALL insertStyleSelection(@Perk, @Var1, @Var2, @Var3, @Id)";
-        using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Perk", styleSelection.Perk);
-        command.Parameters.AddWithValue("@Var1", styleSelection.Var1);
-        command.Parameters.AddWithValue("@Var2", styleSelection.Var2);
-        command.Parameters.AddWithValue("@Var3", styleSelection.Var3);
-
-        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
-        {
-            Direction = ParameterDirection.Output
-        };
-        command.Parameters.Add(idParam);
-
-        command.ExecuteNonQuery();
-
-        return (int)idParam.Value;
-    }
-
-    private int InsertPerksStyle(PerkStyle style)
+    private async Task<int> InsertPerksStyleAsync(PerkStyle style)
     {
         var styleSelectionIds = new List<int>();
 
         foreach (var perkStyleSelection in style.Selections)
-            styleSelectionIds.Add(InsertStyleSelection(perkStyleSelection));
+            styleSelectionIds.Add(await InsertStyleSelectionAsync(perkStyleSelection));
 
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query =
             "CALL insertPerksStyle(@Description, @Style, @StyleSelection1, @StyleSelection2, @StyleSelection3, @StyleSelection4, @Id)";
@@ -176,25 +159,23 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         };
         command.Parameters.Add(idParam);
 
-        command.ExecuteNonQuery();
+        await command.ExecuteNonQueryAsync();
 
         return (int)idParam.Value;
     }
 
-    private int InsertPerks(Perks perks)
+    private async Task<int> InsertStyleSelectionAsync(PerkStyleSelection styleSelection)
     {
-        var statPerksId = InsertStatPerks(perks.StatPerks);
-        var primaryStyleId = InsertPerksStyle(perks.Styles[0]);
-        var secondaryStyleId = InsertPerksStyle(perks.Styles[1]);
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        var query = "CALL insertStyleSelection(@Perk, @Var1, @Var2, @Var3, @Id)";
+        await using var command = new MySqlCommand(query, connection);
 
-        var query = "CALL insertPerks(@StatPerks, @PrimaryStyle, @SecondaryStyle, @Id)";
-        using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@StatPerks", statPerksId);
-        command.Parameters.AddWithValue("@PrimaryStyle", primaryStyleId);
-        command.Parameters.AddWithValue("@SecondaryStyle", secondaryStyleId);
+        command.Parameters.AddWithValue("@Perk", styleSelection.Perk);
+        command.Parameters.AddWithValue("@Var1", styleSelection.Var1);
+        command.Parameters.AddWithValue("@Var2", styleSelection.Var2);
+        command.Parameters.AddWithValue("@Var3", styleSelection.Var3);
 
         var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
         {
@@ -202,40 +183,60 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         };
         command.Parameters.Add(idParam);
 
-        command.ExecuteNonQuery();
+        await command.ExecuteNonQueryAsync();
 
         return (int)idParam.Value;
     }
 
-    public int InsertPlayer(Player player)
+    private async Task<int> InsertStatPerksAsync(PerkStats stats)
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
+
+        var query = "CALL insertStatPerks(@Defense, @Flex, @Offense, @Id)";
+        await using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Defense", stats.Defense);
+        command.Parameters.AddWithValue("@Flex", stats.Flex);
+        command.Parameters.AddWithValue("@Offense", stats.Offense);
+
+        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        {
+            Direction = ParameterDirection.Output
+        };
+        command.Parameters.Add(idParam);
+
+        await command.ExecuteNonQueryAsync();
+
+        return (int)idParam.Value;
+    }
+
+    public async Task<int> InsertPlayerAsync(Player player)
+    {
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query = "CALL insertPlayer(@SummonerPuuid, @Champion)";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@SummonerPuuid", player.Summoner.Puuid);
         command.Parameters.AddWithValue("@Champion", (int)player.Champion);
 
-        var res = command.ExecuteNonQuery();
-
-        return res;
+        return await command.ExecuteNonQueryAsync();
     }
 
-    public Game? GetGame(long gameId)
+    public async Task<Game?> GetGameAsync(long gameId)
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query = "CALL GetGame(@GameId)";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@GameId", gameId);
 
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return null;
         Game? game = null;
 
-        reader.Read();
+        await reader.ReadAsync();
 
         game ??= new Game(
             reader.GetInt32("GameDuration"),
@@ -352,17 +353,17 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         return game;
     }
 
-    public List<(string, PlatformRoute)> GetMatchIds()
+    public async Task<List<(string, PlatformRoute)>> GetMatchIdsAsync()
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query = "SELECT MatchId, PlatformId FROM Games";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
 
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
         List<(string, PlatformRoute)> matchIds = [];
-        while (reader.Read())
+        while (await reader.ReadAsync())
         {
             var id = reader.GetString("MatchId");
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
@@ -372,40 +373,40 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         return matchIds;
     }
 
-    public Player? GetPlayer(string summonerPuuid)
+    public async Task<Player?> GetPlayerAsync(string summonerPuuid)
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query =
             "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = @SummonerPuuid";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@SummonerPuuid", summonerPuuid);
 
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return null;
 
-        reader.Read();
+        await reader.ReadAsync();
         var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
         var summoner = CreateSummonerFromReader(reader);
 
         return new Player(summoner, champion);
     }
 
-    public Dictionary<PlatformRoute, List<Player>> GetPlayers()
+    public async Task<Dictionary<PlatformRoute, List<Player>>> GetPlayersAsync()
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
-        var query = "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = '-FttafhQwv8kD1EYA-CMqU4tirIGr1BraH2BCSNT_TuyetnuJNN-uazUBB6PBqCrHN2j7R14zYy2Sg'";
-        using var command = new MySqlCommand(query, connection);
+        var query = "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid";
+        await using var command = new MySqlCommand(query, connection);
 
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return [];
 
         var players = new Dictionary<PlatformRoute, List<Player>>();
 
-        while (reader.Read())
+        while (await reader.ReadAsync())
         {
             var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
             var summoner = CreateSummonerFromReader(reader);
@@ -420,20 +421,20 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         return players;
     }
 
-    public List<(Summoner, PlatformRoute)> GetSummoners()
+    public async Task<List<(Summoner, PlatformRoute)>> GetSummonersAsync()
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query = "SELECT * FROM Summoners";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
 
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
 
         List<(Summoner, PlatformRoute)> summoners = [];
         if (!reader.HasRows) return summoners;
 
-        while (reader.Read())
+        while (await reader.ReadAsync())
         {
             var summoner = CreateSummonerFromReader(reader);
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
@@ -444,25 +445,25 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         return summoners;
     }
 
-    public List<(Summoner, PlatformRoute)> GetSummonerIdsOrderedByGamesPlayed()
+    public async Task<List<(Summoner, PlatformRoute)>> GetSummonerIdsOrderedByGamesPlayedAsync()
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query = @"
-            SELECT S.*
-            FROM Summoners S
-            LEFT JOIN Participants P on P.SummonerPuuid = S.Puuid
-            GROUP BY S.Puuid
-            ORDER BY COUNT(P.GameId)
-            ";
+        SELECT S.*
+        FROM Summoners S
+        LEFT JOIN Participants P on P.SummonerPuuid = S.Puuid
+        GROUP BY S.Puuid
+        ORDER BY COUNT(P.GameId)
+        ";
 
-        using var command = new MySqlCommand(query, connection);
-        using var reader = command.ExecuteReader();
+        await using var command = new MySqlCommand(query, connection);
+        await using var reader = await command.ExecuteReaderAsync();
 
         var summoners = new List<(Summoner, PlatformRoute)>();
 
-        while (reader.Read())
+        while (await reader.ReadAsync())
         {
             var summoner = CreateSummonerFromReader(reader);
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
@@ -473,23 +474,23 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         return summoners;
     }
 
-    public List<string> GetSummonerIds()
+    public async Task<List<string>> GetSummonerIdsAsync()
     {
-        using var connection = databaseConfig.GetConnection();
-        connection.Open();
+        await using var connection = databaseConfig.GetConnection();
+        await connection.OpenAsync();
 
         var query = "SELECT Id FROM Summoners";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
 
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
 
         List<string> summonerIds = [];
-        while (reader.Read()) summonerIds.Add(reader.GetString("Id"));
+        while (await reader.ReadAsync()) summonerIds.Add(reader.GetString("Id"));
 
         return summonerIds;
     }
 
-    private Summoner CreateSummonerFromReader(MySqlDataReader reader)
+    private Summoner CreateSummonerFromReader(DbDataReader reader)
     {
         return new Summoner
         {
