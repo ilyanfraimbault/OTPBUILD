@@ -19,23 +19,6 @@ create table Games
     Winner             int         not null
 );
 
-create table Players
-(
-    PlayerName    varchar(50) not null
-        primary key,
-    TwitchChannel varchar(50) null
-);
-
-create table PlayerChampions
-(
-    PlayerName varchar(50) not null,
-    Champion   int         not null,
-    PlayRate   float       not null,
-    primary key (PlayerName, Champion),
-    constraint PlayerChampions_ibfk_1
-        foreign key (PlayerName) references Players (PlayerName)
-);
-
 create table StatPerks
 (
     id      int auto_increment
@@ -121,10 +104,7 @@ create table Summoners
     ProfileIconId int         null,
     RevisionDate  bigint      null,
     Level         bigint      null,
-    PlayerName    varchar(50) null,
-    PlatformId    varchar(10) not null,
-    constraint Summoners_ibfk_1
-        foreign key (PlayerName) references Players (PlayerName)
+    PlatformId    varchar(10) not null
 );
 
 create table Participants
@@ -153,11 +133,14 @@ create table Participants
     TeamPosition   varchar(10) not null,
     primary key (GameId, SummonerPuuid),
     constraint Participants_ibfk_1
-        foreign key (Perks) references Perks (id),
+        foreign key (Perks) references Perks (id)
+            on update cascade on delete cascade,
     constraint Participants_ibfk_2
-        foreign key (SummonerPuuid) references Summoners (Puuid),
+        foreign key (SummonerPuuid) references Summoners (Puuid)
+            on update cascade on delete cascade,
     constraint Participants_ibfk_3
         foreign key (GameId) references Games (GameId)
+            on update cascade on delete cascade
 );
 
 create index Perks
@@ -166,8 +149,38 @@ create index Perks
 create index SummonerPuuid
     on Participants (SummonerPuuid);
 
-create index PlayerName
-    on Summoners (PlayerName);
+create table Players
+(
+    SummonerPuuid varchar(78) not null,
+    Champion      int         not null,
+    primary key (SummonerPuuid, Champion),
+    constraint Players_ibfk_1
+        foreign key (SummonerPuuid) references Summoners (Puuid)
+            on update cascade on delete cascade
+);
+
+create view GamesPlayedByChampionSummoner as
+select `P`.`SummonerPuuid` AS `SummonerPuuid`, `P`.`Champion` AS `Champion`, count(0) AS `gamesPlayed`
+from `OTPBUILD`.`Participants` `P`
+group by `P`.`SummonerPuuid`, `P`.`Champion`
+order by count(0) desc;
+
+create view championStats as
+select `P`.`Champion`                                                                                               AS `Champion`,
+       count(0) / (select count(0)
+                   from `OTPBUILD`.`Participants`
+                   where `OTPBUILD`.`Participants`.`Champion` = `P`.`Champion`)                                     AS `winRate`,
+       count(0)                                                                                                     AS `gamesPlayed`
+from (`OTPBUILD`.`Participants` `P` join `OTPBUILD`.`Games` `G` on (`G`.`GameId` = `P`.`GameId`))
+where `P`.`TeamId` = `G`.`Winner`
+group by `P`.`Champion`
+order by count(0);
+
+create view sideWinRate as
+select `blue`.`blueSide` / (`blue`.`blueSide` + `red`.`redSide`) AS `blueWinRate`,
+       `red`.`redSide` / (`blue`.`blueSide` + `red`.`redSide`)   AS `redWinRate`
+from (select count(0) AS `blueSide` from `OTPBUILD`.`Games` where `OTPBUILD`.`Games`.`Winner` = '100') `blue`
+         join (select count(0) AS `redSide` from `OTPBUILD`.`Games` where `OTPBUILD`.`Games`.`Winner` = '200') `red`;
 
 create procedure getGame(IN game_id bigint)
 BEGIN
@@ -291,7 +304,7 @@ create procedure insertParticipant(IN p_GameId bigint, IN p_SummonerPuuid varcha
 BEGIN
     CALL insertAccount(p_SummonerPuuid, p_GameName, p_TagLine);
     CALL insertSummoner(p_SummonerId, p_SummonerPuuid, p_GameName,
-                        NULL, NULL, NULL, NULL, NULL, p_PlatformId);
+                        NULL, NULL, NULL, NULL, p_PlatformId);
 
     INSERT INTO Participants
     VALUES (p_GameId, p_SummonerPuuid, p_Champion, p_TeamId, p_Kills, p_Deaths, p_Assists,
@@ -338,20 +351,9 @@ BEGIN
     END IF;
 END;
 
-create procedure insertPlayer(IN p_PlayerName varchar(50), IN p_TwitchChannel varchar(50))
+create procedure insertPlayer(IN p_SummonerPuuid varchar(78), IN p_Champion int)
 BEGIN
-    INSERT INTO Players (PlayerName, TwitchChannel)
-    VALUES (p_PlayerName, p_TwitchChannel)
-    ON DUPLICATE KEY UPDATE
-        TwitchChannel = VALUES(TwitchChannel);
-END;
-
-create procedure insertPlayerChampion(IN p_PlayerName varchar(50), IN p_Champion int, IN p_PlayRate float)
-BEGIN
-    INSERT INTO PlayerChampions (PlayerName, Champion, PlayRate)
-    VALUES (p_PlayerName, p_Champion, p_PlayRate)
-    ON DUPLICATE KEY UPDATE
-        PlayRate = IFNULL(PlayRate, p_PlayRate);
+    INSERT IGNORE INTO Players(SummonerPuuid, Champion) VALUES (p_SummonerPuuid, p_Champion);
 END;
 
 create procedure insertStatPerks(IN p_Defense int, IN p_Flex int, IN p_Offense int, OUT p_Id int)
@@ -389,17 +391,15 @@ END;
 
 create procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78), IN p_Name varchar(50),
                                 IN p_AccountId varchar(56), IN p_ProfileIconId int, IN p_RevisionDate bigint,
-                                IN p_Level bigint, IN p_PlayerName varchar(50), IN p_PlatformId varchar(50))
+                                IN p_Level bigint, IN p_PlatformId varchar(50))
 BEGIN
-    INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlayerName, PlatformId)
-    VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlayerName, p_PlatformId)
+    INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlatformId)
+    VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlatformId)
     ON DUPLICATE KEY UPDATE Name          = IFNULL(Name, p_Name),
                             AccountId     = IFNULL(AccountId, p_AccountId),
                             ProfileIconId = IFNULL(ProfileIconId, p_ProfileIconId),
                             RevisionDate  = IFNULL(RevisionDate, p_RevisionDate),
                             Level         = IFNULL(Level, p_Level),
-                            PlayerName    = IFNULL(PlayerName, p_PlayerName),
                             PlatformId    = IFNULL(PlatformId, p_PlatformId);
 END;
-
 
