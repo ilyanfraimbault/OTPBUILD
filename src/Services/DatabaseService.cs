@@ -449,13 +449,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
-        var query = @"
-        SELECT S.*
-        FROM Summoners S
-        LEFT JOIN Participants P on P.SummonerPuuid = S.Puuid
-        GROUP BY S.Puuid
-        ORDER BY COUNT(P.GameId)
-        ";
+        var query = "SELECT * FROM SummonersOrderedByGamesPlayed";
 
         await using var command = new MySqlCommand(query, connection);
         await using var reader = await command.ExecuteReaderAsync();
