@@ -160,27 +160,55 @@ create table Players
 );
 
 create view GamesPlayedByChampionSummoner as
-select `P`.`SummonerPuuid` AS `SummonerPuuid`, `P`.`Champion` AS `Champion`, count(0) AS `gamesPlayed`
-from `OTPBUILD`.`Participants` `P`
-group by `P`.`SummonerPuuid`, `P`.`Champion`
+select P.SummonerPuuid AS SummonerPuuid, P.Champion AS Champion, count(0) AS gamesPlayed
+from OTPBUILD.Participants P
+group by P.SummonerPuuid, P.Champion
 order by count(0) desc;
 
+create view LastGameStartTimestampBYSummoner as
+select P.SummonerPuuid AS SummonerPuuid, max(G.GameStartTimestamp) AS LastGameStartTimestamp
+from (OTPBUILD.Games G join OTPBUILD.Participants P on (G.GameId = P.GameId))
+group by P.SummonerPuuid;
+
+create view SummonerStatsByChampion as
+select P.SummonerPuuid AS SummonerPuuid,
+       P.Champion      AS Champion,
+       sum(P.Kills)    AS Kills,
+       sum(P.Deaths)   AS Deaths,
+       sum(P.Assists)  AS Assists,
+       count(0)            AS GamesPlayed
+from OTPBUILD.Participants P
+group by P.SummonerPuuid, P.Champion;
+
+create view SummonersOrderedByGamesPlayed as
+select S.Id            AS Id,
+       S.Puuid         AS Puuid,
+       S.Name          AS Name,
+       S.AccountId     AS AccountId,
+       S.ProfileIconId AS ProfileIconId,
+       S.RevisionDate  AS RevisionDate,
+       S.Level         AS Level,
+       S.PlatformId    AS PlatformId
+from (OTPBUILD.Summoners S left join OTPBUILD.Participants P on (P.SummonerPuuid = S.Puuid))
+group by S.Puuid
+order by count(P.GameId);
+
 create view championStats as
-select `P`.`Champion`                                                                                               AS `Champion`,
+select P.Champion                                                                                               AS Champion,
        count(0) / (select count(0)
-                   from `OTPBUILD`.`Participants`
-                   where `OTPBUILD`.`Participants`.`Champion` = `P`.`Champion`)                                     AS `winRate`,
-       count(0)                                                                                                     AS `gamesPlayed`
-from (`OTPBUILD`.`Participants` `P` join `OTPBUILD`.`Games` `G` on (`G`.`GameId` = `P`.`GameId`))
-where `P`.`TeamId` = `G`.`Winner`
-group by `P`.`Champion`
+                   from OTPBUILD.Participants
+                   where OTPBUILD.Participants.Champion = P.Champion)                                     AS winRate,
+       count(0)                                                                                                     AS gamesPlayed
+from (OTPBUILD.Participants P join OTPBUILD.Games G on (G.GameId = P.GameId))
+where P.TeamId = G.Winner
+group by P.Champion
 order by count(0);
 
 create view sideWinRate as
-select `blue`.`blueSide` / (`blue`.`blueSide` + `red`.`redSide`) AS `blueWinRate`,
-       `red`.`redSide` / (`blue`.`blueSide` + `red`.`redSide`)   AS `redWinRate`
-from (select count(0) AS `blueSide` from `OTPBUILD`.`Games` where `OTPBUILD`.`Games`.`Winner` = '100') `blue`
-         join (select count(0) AS `redSide` from `OTPBUILD`.`Games` where `OTPBUILD`.`Games`.`Winner` = '200') `red`;
+select blue.blueSide / (blue.blueSide + red.redSide) AS blueWinRate,
+       red.redSide / (blue.blueSide + red.redSide)   AS redWinRate
+from (select count(0) AS blueSide from OTPBUILD.Games where OTPBUILD.Games.Winner = '100') blue
+         join (select count(0) AS redSide from OTPBUILD.Games where OTPBUILD.Games.Winner = '200') red;
 
 create procedure getGame(IN game_id bigint)
 BEGIN
