@@ -5,23 +5,22 @@ using Camille.RiotGames.AccountV1;
 using Camille.RiotGames.MatchV5;
 using Camille.RiotGames.SummonerV4;
 using MySql.Data.MySqlClient;
-using OTPBUILD.Configurations;
 using OTPBUILD.Models;
 using Team = Camille.RiotGames.Enums.Team;
 
 namespace OTPBUILD.Services;
 
-public class DatabaseService(DatabaseConfig databaseConfig)
+public class DatabaseService(DatabaseConnection databaseConnection)
 {
     public async Task<int> InsertGameAsync(Game game)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query =
             "CALL insertGame(@GameId, @GameDuration, @GameStartTimestamp, @GameVersion, @GameType, @PlatformId, @Winner, @MatchId)";
 
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@GameId", game.GameId);
         command.Parameters.AddWithValue("@GameDuration", game.GameDuration);
         command.Parameters.AddWithValue("@GameStartTimestamp", game.GameStartTimestamp);
@@ -41,7 +40,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<int> InsertAccountAsync(Account account)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "CALL insertAccount(@Puuid, @GameName, @TagLine)";
@@ -55,7 +54,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<int> InsertSummonerAsync(Summoner summoner, PlatformRoute platformRoute)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query =
@@ -77,7 +76,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
     {
         var perksId = await InsertPerksAsync(participant.Perks);
 
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var participantQuery =
@@ -114,7 +113,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         var primaryStyleId = await InsertPerksStyleAsync(perks.Styles[0]);
         var secondaryStyleId = await InsertPerksStyleAsync(perks.Styles[1]);
 
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "CALL insertPerks(@StatPerks, @PrimaryStyle, @SecondaryStyle, @Id)";
@@ -141,12 +140,12 @@ public class DatabaseService(DatabaseConfig databaseConfig)
         foreach (var perkStyleSelection in style.Selections)
             styleSelectionIds.Add(await InsertStyleSelectionAsync(perkStyleSelection));
 
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query =
             "CALL insertPerksStyle(@Description, @Style, @StyleSelection1, @StyleSelection2, @StyleSelection3, @StyleSelection4, @Id)";
-        using var command = new MySqlCommand(query, connection);
+        await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@Description", style.Description);
         command.Parameters.AddWithValue("@Style", style.Style);
         for (var i = 0; i < 4; i++)
@@ -166,7 +165,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     private async Task<int> InsertStyleSelectionAsync(PerkStyleSelection styleSelection)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "CALL insertStyleSelection(@Perk, @Var1, @Var2, @Var3, @Id)";
@@ -190,7 +189,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     private async Task<int> InsertStatPerksAsync(PerkStats stats)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "CALL insertStatPerks(@Defense, @Flex, @Offense, @Id)";
@@ -212,7 +211,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<int> InsertPlayerAsync(Player player)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "CALL insertPlayer(@SummonerPuuid, @Champion)";
@@ -225,7 +224,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<Game?> GetGameAsync(long gameId)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "CALL GetGame(@GameId)";
@@ -355,7 +354,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<List<(string, PlatformRoute)>> GetMatchIdsAsync()
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "SELECT MatchId, PlatformId FROM Games";
@@ -375,7 +374,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<Player?> GetPlayerAsync(string summonerPuuid)
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query =
@@ -395,7 +394,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<Dictionary<PlatformRoute, List<Player>>> GetPlayersAsync()
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid";
@@ -423,7 +422,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<List<(Summoner, PlatformRoute)>> GetSummonersAsync()
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "SELECT * FROM Summoners";
@@ -447,7 +446,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<List<(Summoner, PlatformRoute)>> GetSummonerIdsOrderedByGamesPlayedAsync()
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = @"
@@ -476,7 +475,7 @@ public class DatabaseService(DatabaseConfig databaseConfig)
 
     public async Task<List<string>> GetSummonerIdsAsync()
     {
-        await using var connection = databaseConfig.GetConnection();
+        await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query = "SELECT Id FROM Summoners";
