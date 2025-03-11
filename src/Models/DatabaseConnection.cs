@@ -5,10 +5,8 @@ namespace OTPBUILD.Models;
 
 public class DatabaseConnection(DatabaseConfig databaseConfig)
 {
-    private static MySqlConnection? _connection;
-
     public MySqlConnection GetConnection()
     {
-        return _connection ??= databaseConfig.GetConnection();
+        return databaseConfig.GetConnection(); // Toujours créer une nouvelle connexion
     }
 }
