@@ -33,9 +33,11 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         if (result <= 0) return result;
 
-        foreach (var participant in game.Participants) await InsertParticipantAsync(participant, game);
+        var participantsTasks = game.Participants.Select(participant => InsertParticipantAsync(participant, game)).ToList();
 
-        return result;
+        var results = await Task.WhenAll(participantsTasks);
+
+        return results.Sum(participant => participant) + result;
     }
 
     public async Task<int> InsertAccountAsync(Account account)
@@ -74,10 +76,10 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<int> InsertParticipantAsync(GameParticipant participant, Game game)
     {
-        var perksId = await InsertPerksAsync(participant.Perks);
-
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
+
+        var perksId = await InsertPerksAsync(participant.Perks);
 
         var participantQuery =
             "CALL insertParticipant(@GameId, @SummonerPuuid, @SummonerId, @GameName, @TagLine, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
@@ -135,10 +137,9 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     private async Task<int> InsertPerksStyleAsync(PerkStyle style)
     {
-        var styleSelectionIds = new List<int>();
+        var styleSelectionIdsTasks = style.Selections.Select(InsertStyleSelectionAsync).ToList();
 
-        foreach (var perkStyleSelection in style.Selections)
-            styleSelectionIds.Add(await InsertStyleSelectionAsync(perkStyleSelection));
+        await Task.WhenAll(styleSelectionIdsTasks);
 
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
@@ -150,7 +151,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         command.Parameters.AddWithValue("@Style", style.Style);
         for (var i = 0; i < 4; i++)
             command.Parameters.AddWithValue($"@StyleSelection{i + 1}",
-                styleSelectionIds.Count > i ? styleSelectionIds[i] : DBNull.Value);
+                styleSelectionIdsTasks.Count > i ? styleSelectionIdsTasks[i].Result : DBNull.Value);
 
         var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
         {
