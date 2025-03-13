@@ -393,18 +393,18 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return new Player(summoner, champion);
     }
 
-    public async Task<Dictionary<PlatformRoute, List<Player>>> GetPlayersAsync()
+    public async Task<Dictionary<PlatformRoute, List<(Player, long)>>> GetPlayersAsync()
     {
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
-        var query = "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid";
+        var query = "SELECT * FROM LastGameStartTimestampByPlayers LGSTP JOIN Summoners S ON LGSTP.SummonerPuuid = S.Puuid";
         await using var command = new MySqlCommand(query, connection);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return [];
 
-        var players = new Dictionary<PlatformRoute, List<Player>>();
+        var players = new Dictionary<PlatformRoute, List<(Player, long)>>();
 
         while (await reader.ReadAsync())
         {
@@ -412,10 +412,11 @@ public class DatabaseService(DatabaseConnection databaseConnection)
             var summoner = CreateSummonerFromReader(reader);
 
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            var lastGameStartTimestamp = reader.GetInt64("LastGameStartTimestamp");
 
             if (!players.ContainsKey(platform)) players[platform] = [];
 
-            players[platform].Add(new Player(summoner, champion));
+            players[platform].Add((new Player(summoner, champion), lastGameStartTimestamp));
         }
 
         return players;
