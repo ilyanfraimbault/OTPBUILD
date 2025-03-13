@@ -12,7 +12,7 @@ public class GameParticipant
     public int SummonerLevel { get; }
     public string Puuid { get; }
     public string? RiotIdGameName { get; }
-    public string RiotIdTagline { get; }
+    public string? RiotIdTagline { get; }
 
     public Champion Champion { get; }
     public Team TeamId { get; }
