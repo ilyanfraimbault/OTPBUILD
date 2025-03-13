@@ -67,7 +67,7 @@ public class FetchOtps(RiotGamesApi riotApi)
             {
                 leagueEntries = GetEntries(platform);
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 Console.WriteLine("Error while fetching entries");
             }
@@ -105,7 +105,7 @@ public class FetchOtps(RiotGamesApi riotApi)
                     var championMasteries = riotApi.ChampionMasteryV4().GetAllChampionMasteriesByPUUID(platform, summoner.Puuid);
                     ChampionMasteries.Add(summoner, championMasteries);
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     // ignored
                 }
