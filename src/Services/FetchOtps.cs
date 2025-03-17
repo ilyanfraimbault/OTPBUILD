@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Camille.Enums;
 using Camille.RiotGames;
 using Camille.RiotGames.ChampionMasteryV4;
@@ -9,7 +10,7 @@ namespace OTPBUILD.Services;
 
 public class FetchOtps(RiotGamesApi riotApi)
 {
-    public Dictionary<PlatformRoute, List<Player>> Players { get; } = new();
+    public Dictionary<PlatformRoute, List<Player>> Players { get; set; } = new();
     public List<Champion> Champions { get; } = [];
     public List<PlatformRoute> PlatformRoutes { get; } = [];
     public Dictionary<Summoner, ChampionMastery[]> ChampionMasteries { get; } = new();
@@ -24,23 +25,26 @@ public class FetchOtps(RiotGamesApi riotApi)
     public int FindPlayers()
     {
         var count = 0;
-        foreach (var platform in PlatformRoutes)
-        {
-            List<Player> list = [];
+        var players = new ConcurrentDictionary<PlatformRoute, List<Player>>();
 
-            foreach (var champion in Champions)
+        Parallel.ForEach(PlatformRoutes, platform =>
+        {
+            var list = new ConcurrentBag<Player>();
+
+            Parallel.ForEach(Champions, champion =>
             {
                 foreach (var summoner in ChampionMasteries.Keys.Where(summoner => IsMain(summoner, champion)))
                 {
                     var player = new Player(summoner, champion);
                     list.Add(player);
-                    count++;
+                    Interlocked.Increment(ref count);
                 }
-            }
+            });
 
-            Players.Add(platform, list);
-        }
+            players[platform] = list.ToList();
+        });
 
+        Players = players.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         return count;
     }
 
