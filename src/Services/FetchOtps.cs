@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Camille.Enums;
 using Camille.RiotGames;
 using Camille.RiotGames.ChampionMasteryV4;
@@ -9,7 +10,7 @@ namespace OTPBUILD.Services;
 
 public class FetchOtps(RiotGamesApi riotApi)
 {
-    public Dictionary<PlatformRoute, List<Player>> Players { get; } = new();
+    public Dictionary<PlatformRoute, List<Player>> Players { get; set; } = new();
     public List<Champion> Champions { get; } = [];
     public List<PlatformRoute> PlatformRoutes { get; } = [];
     public Dictionary<Summoner, ChampionMastery[]> ChampionMasteries { get; } = new();
@@ -24,48 +25,40 @@ public class FetchOtps(RiotGamesApi riotApi)
     public int FindPlayers()
     {
         var count = 0;
-        foreach (var platform in PlatformRoutes)
-        {
-            List<Player> list = [];
+        var players = new ConcurrentDictionary<PlatformRoute, List<Player>>();
 
-            foreach (var champion in Champions)
+        Parallel.ForEach(PlatformRoutes, platform =>
+        {
+            var list = new ConcurrentBag<Player>();
+
+            Parallel.ForEach(Champions, champion =>
             {
                 foreach (var summoner in ChampionMasteries.Keys.Where(summoner => IsMain(summoner, champion)))
                 {
                     var player = new Player(summoner, champion);
                     list.Add(player);
-                    count++;
+                    Interlocked.Increment(ref count);
                 }
-            }
-            Players.Add(platform, list);
-        }
+            });
 
+            players[platform] = list.ToList();
+        });
+
+        Players = players.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         return count;
     }
 
-    private List<LeagueItem> GetEntries(PlatformRoute platform)
+    public async Task SetSummonersAsync(int? limit = null, List<string>? summonerIds = null)
     {
-        var challengerLeague = riotApi.LeagueV4().GetChallengerLeague(platform, QueueType.RANKED_SOLO_5x5);
-        var grandmasterLeague = riotApi.LeagueV4().GetGrandmasterLeague(platform, QueueType.RANKED_SOLO_5x5);
-        var masterLeague = riotApi.LeagueV4().GetMasterLeague(platform, QueueType.RANKED_SOLO_5x5);
-        var leagueEntriesList = challengerLeague.Entries
-            .Concat(grandmasterLeague.Entries).ToList()
-            .Concat(masterLeague.Entries).ToList();
-
-        return leagueEntriesList;
-    }
-
-    public void SetSummoners(int? limit = null, List<string>? summonerIds = null)
-    {
-        Dictionary<PlatformRoute, List<LeagueItem>> entries = [];
+        var entries = new Dictionary<PlatformRoute, List<LeagueItem>>();
 
         foreach (var platform in PlatformRoutes)
         {
-            List<LeagueItem> leagueEntries = [];
+            List<LeagueItem> leagueEntries = new();
 
             try
             {
-                leagueEntries = GetEntries(platform);
+                leagueEntries = await GetEntriesAsync(platform);
             }
             catch (Exception)
             {
@@ -90,27 +83,58 @@ public class FetchOtps(RiotGamesApi riotApi)
 
         Console.WriteLine("Starting to fetch summoners...");
         var countPlatform = 0;
+        var tasks = new List<Task>();
+        var semaphore = new SemaphoreSlim(100); // Limit to 100 concurrent tasks
+
         foreach (var (platform, platformEntries) in entries)
         {
             countPlatform++;
             var countLeagueItem = 0;
+
             foreach (var leagueItem in platformEntries)
             {
                 countLeagueItem++;
-                Console.WriteLine($"Platform: {countPlatform}/{entries.Count} leagueItem: {countLeagueItem}/{platformEntries.Count}");
-                try
-                {
-                    var summoner = riotApi.SummonerV4().GetBySummonerId(platform, leagueItem.SummonerId);
+                Console.WriteLine(
+                    $"Platform: {countPlatform}/{entries.Count} leagueItem: {countLeagueItem}/{platformEntries.Count}");
 
-                    var championMasteries = riotApi.ChampionMasteryV4().GetAllChampionMasteriesByPUUID(platform, summoner.Puuid);
-                    ChampionMasteries.Add(summoner, championMasteries);
-                }
-                catch (Exception)
+                await semaphore.WaitAsync();
+                tasks.Add(Task.Run(async () =>
                 {
-                    // ignored
-                }
+                    try
+                    {
+                        var summoner = await riotApi.SummonerV4().GetBySummonerIdAsync(platform, leagueItem.SummonerId);
+                        var championMasteries = await riotApi.ChampionMasteryV4()
+                            .GetAllChampionMasteriesByPUUIDAsync(platform, summoner.Puuid);
+                        lock (ChampionMasteries)
+                        {
+                            ChampionMasteries.Add(summoner, championMasteries);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // ignored
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }));
             }
         }
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task<List<LeagueItem>> GetEntriesAsync(PlatformRoute platform)
+    {
+        var challengerLeague = await riotApi.LeagueV4().GetChallengerLeagueAsync(platform, QueueType.RANKED_SOLO_5x5);
+        var grandmasterLeague = await riotApi.LeagueV4().GetGrandmasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5);
+        var masterLeague = await riotApi.LeagueV4().GetMasterLeagueAsync(platform, QueueType.RANKED_SOLO_5x5);
+        var leagueEntriesList = challengerLeague.Entries
+            .Concat(grandmasterLeague.Entries).ToList()
+            .Concat(masterLeague.Entries).ToList();
+
+        return leagueEntriesList;
     }
 
     private bool IsMain(Summoner summoner, Champion champion)
