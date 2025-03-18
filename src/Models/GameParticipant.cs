@@ -9,7 +9,7 @@ public class GameParticipant
 {
     public string SummonerName { get; }
     public string SummonerId { get; }
-    public int SummonerLevel { get; }
+    public long SummonerLevel { get; }
     public string Puuid { get; }
     public string? RiotIdGameName { get; }
     public string? RiotIdTagline { get; }
@@ -54,7 +54,7 @@ public class GameParticipant
     }
 
     public GameParticipant(
-        string summonerName, string summonerId, int summonerLevel, string puuid, Champion champion, Team teamId,
+        string summonerName, string summonerId, long summonerLevel, string puuid, Champion champion, Team teamId,
         string teamPosition, int kills, int deaths, int assists, List<int> items, List<int> spellsCasts,
         (int, int) summonerSpells, Perks perks, string? riotIdGameName, string riotIdTagline
         )
