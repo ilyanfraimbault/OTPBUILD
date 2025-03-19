@@ -225,134 +225,180 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return await command.ExecuteNonQueryAsync();
     }
 
+    private Task<GameParticipant> ReadParticipantFromReaderAsync(DbDataReader reader)
+    {
+        var perkStats = new PerkStats
+            {
+                Defense = reader.GetInt32("defense"),
+                Flex = reader.GetInt32("flex"),
+                Offense = reader.GetInt32("offense")
+            };
+
+            var primaryStyle = new PerkStyle
+            {
+                Style = reader.GetInt32("primaryStyle"),
+                Description = reader.GetString("primaryStyleDescription"),
+                Selections =
+                [
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection1"),
+                        Var1 = reader.GetInt32("primStyleSelection1Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection1Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection1Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection2"),
+                        Var1 = reader.GetInt32("primStyleSelection2Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection2Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection2Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection3"),
+                        Var1 = reader.GetInt32("primStyleSelection3Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection3Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection3Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("primStyleSelection4"),
+                        Var1 = reader.GetInt32("primStyleSelection4Var1"),
+                        Var2 = reader.GetInt32("primStyleSelection4Var2"),
+                        Var3 = reader.GetInt32("primStyleSelection4Var3")
+                    }
+                ]
+            };
+
+            var secondaryStyle = new PerkStyle
+            {
+                Style = reader.GetInt32("secondaryStyle"),
+                Description = reader.GetString("secondaryStyleDescription"),
+                Selections =
+                [
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("secStyleSelection1"),
+                        Var1 = reader.GetInt32("secStyleSelection1Var1"),
+                        Var2 = reader.GetInt32("secStyleSelection1Var2"),
+                        Var3 = reader.GetInt32("secStyleSelection1Var3")
+                    },
+                    new PerkStyleSelection
+                    {
+                        Perk = reader.GetInt32("secStyleSelection2"),
+                        Var1 = reader.GetInt32("secStyleSelection2Var1"),
+                        Var2 = reader.GetInt32("secStyleSelection2Var2"),
+                        Var3 = reader.GetInt32("secStyleSelection2Var3")
+                    }
+                ]
+            };
+
+            var perks = new Perks
+            {
+                StatPerks = perkStats,
+                Styles = [primaryStyle, secondaryStyle]
+            };
+
+            var participant = new GameParticipant(
+                reader.GetString("SummonerName"),
+                reader.GetString("SummonerId"),
+                reader.GetInt32("SummonerLevel"),
+                reader.GetString("SummonerPuuid"),
+                Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
+                Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
+                reader.GetString("TeamPosition"),
+                reader.GetInt32("Kills"),
+                reader.GetInt32("Deaths"),
+                reader.GetInt32("Assists"),
+                new List<int>
+                {
+                    reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
+                    reader.GetInt32("Item3"), reader.GetInt32("Item4"), reader.GetInt32("Item5"),
+                    reader.GetInt32("Item6")
+                },
+                new List<int>
+                {
+                    reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
+                    reader.GetInt32("SpellCast4")
+                },
+                (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
+                perks,
+                reader.GetString("GameName"),
+                reader.GetString("Tagline")
+            );
+
+            return Task.FromResult(participant);
+    }
+
     public async Task<Game?> GetGameAsync(long gameId)
     {
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
-        var query = "CALL GetGame(@GameId)";
+        var query = "SELECT * FROM gamesview G WHERE G.GameId = @GameId";
+
         await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@GameId", gameId);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return null;
-        Game? game = null;
 
         await reader.ReadAsync();
 
-        game ??= new Game(
-            reader.GetInt32("GameDuration"),
-            reader.GetInt64("GameStartTimestamp"),
-            reader.GetInt64("GameId"),
-            reader.GetString("GameVersion"),
-            Enum.Parse<GameType>(reader.GetString("GameType")),
-            reader.GetString("MatchId"),
-            Enum.Parse<PlatformRoute>(reader.GetString("PlatformId")),
-            Enum.Parse<Team>(reader.GetInt32("Winner").ToString()),
-            []
-        );
+        var gameDuration = reader.GetInt32("GameDuration");
+        var gameStartTimestamp = reader.GetInt64("GameStartTimestamp");
+        var gameVersion = reader.GetString("GameVersion");
+        var gameType = Enum.Parse<GameType>(reader.GetString("GameType"));
+        var matchId = reader.GetString("MatchId");
+        var platformId = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+        var winner = Enum.Parse<Team>(reader.GetInt32("Winner").ToString());
 
-        var perkStats = new PerkStats
+        var game = new Game(gameDuration, gameStartTimestamp, gameId, gameVersion, gameType, matchId, platformId,
+            winner, []);
+
+        do
         {
-            Defense = reader.GetInt32("defense"),
-            Flex = reader.GetInt32("flex"),
-            Offense = reader.GetInt32("offense")
-        };
-
-        var primaryStyle = new PerkStyle
-        {
-            Style = reader.GetInt32("primaryStyle"),
-            Description = reader.GetString("primaryStyleDescription"),
-            Selections =
-            [
-                new PerkStyleSelection
-                {
-                    Perk = reader.GetInt32("primStyleSelection1"),
-                    Var1 = reader.GetInt32("primStyleSelection1Var1"),
-                    Var2 = reader.GetInt32("primStyleSelection1Var2"),
-                    Var3 = reader.GetInt32("primStyleSelection1Var3")
-                },
-                new PerkStyleSelection
-                {
-                    Perk = reader.GetInt32("primStyleSelection2"),
-                    Var1 = reader.GetInt32("primStyleSelection2Var1"),
-                    Var2 = reader.GetInt32("primStyleSelection2Var2"),
-                    Var3 = reader.GetInt32("primStyleSelection2Var3")
-                },
-                new PerkStyleSelection
-                {
-                    Perk = reader.GetInt32("primStyleSelection3"),
-                    Var1 = reader.GetInt32("primStyleSelection3Var1"),
-                    Var2 = reader.GetInt32("primStyleSelection3Var2"),
-                    Var3 = reader.GetInt32("primStyleSelection3Var3")
-                },
-                new PerkStyleSelection
-                {
-                    Perk = reader.GetInt32("primStyleSelection4"),
-                    Var1 = reader.GetInt32("primStyleSelection4Var1"),
-                    Var2 = reader.GetInt32("primStyleSelection4Var2"),
-                    Var3 = reader.GetInt32("primStyleSelection4Var3")
-                }
-            ]
-        };
-
-        var secondaryStyle = new PerkStyle
-        {
-            Style = reader.GetInt32("secondaryStyle"),
-            Description = reader.GetString("secondaryStyleDescription"),
-            Selections =
-            [
-                new PerkStyleSelection
-                {
-                    Perk = reader.GetInt32("secStyleSelection1"),
-                    Var1 = reader.GetInt32("secStyleSelection1Var1"),
-                    Var2 = reader.GetInt32("secStyleSelection1Var2"),
-                    Var3 = reader.GetInt32("secStyleSelection1Var3")
-                },
-                new PerkStyleSelection
-                {
-                    Perk = reader.GetInt32("secStyleSelection2"),
-                    Var1 = reader.GetInt32("secStyleSelection2Var1"),
-                    Var2 = reader.GetInt32("secStyleSelection2Var2"),
-                    Var3 = reader.GetInt32("secStyleSelection2Var3")
-                }
-            ]
-        };
-
-        var perks = new Perks
-        {
-            StatPerks = perkStats,
-            Styles = [primaryStyle, secondaryStyle]
-        };
-
-        var participant = new GameParticipant(
-            reader.GetString("SummonerName"),
-            reader.GetString("SummonerId"),
-            reader.GetInt32("SummonerLevel"),
-            reader.GetString("SummonerPuuid"),
-            Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
-            Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
-            reader.GetString("TeamPosition"),
-            reader.GetInt32("Kills"),
-            reader.GetInt32("Deaths"),
-            reader.GetInt32("Assists"),
-            [
-                reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
-                reader.GetInt32("Item3"),
-                reader.GetInt32("Item4"), reader.GetInt32("Item5"), reader.GetInt32("Item6")
-            ],
-            [
-                reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
-                reader.GetInt32("SpellCast4")
-            ],
-            (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
-            perks,
-            reader.GetString("GameName"),
-            reader.GetString("TagLine")
-        );
-        game.Participants.Add(participant);
+            game.Participants.Add(await ReadParticipantFromReaderAsync(reader));
+        } while (await reader.ReadAsync());
 
         return game;
+    }
+
+    public async Task<List<Game>> GetGamesAsync()
+    {
+        await using var connection = databaseConnection.GetConnection();
+        await connection.OpenAsync();
+
+        var query = "SELECT * FROM gamesview";
+        await using var command = new MySqlCommand(query, connection);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!reader.HasRows) return [];
+
+        var games = new Dictionary<long, Game>();
+
+        while (await reader.ReadAsync())
+        {
+            var gameId = reader.GetInt64("GameId");
+            if (!games.ContainsKey(gameId))
+            {
+                var gameDuration = reader.GetInt32("GameDuration");
+                var gameStartTimestamp = reader.GetInt64("GameStartTimestamp");
+                var gameVersion = reader.GetString("GameVersion");
+                var gameType = Enum.Parse<GameType>(reader.GetString("GameType"));
+                var matchId = reader.GetString("MatchId");
+                var platformId = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+                var winner = Enum.Parse<Team>(reader.GetInt32("Winner").ToString());
+
+                games[gameId] = new Game(gameDuration, gameStartTimestamp, gameId, gameVersion, gameType, matchId, platformId,
+                    winner, []);
+            }
+
+            games[gameId].Participants.Add(await ReadParticipantFromReaderAsync(reader));
+        }
+
+        return games.Values.ToList();
     }
 
     public async Task<List<(string, PlatformRoute)>> GetMatchIdsAsync()
