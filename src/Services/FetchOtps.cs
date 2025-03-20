@@ -1,16 +1,17 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Camille.Enums;
 using Camille.RiotGames;
 using Camille.RiotGames.ChampionMasteryV4;
 using Camille.RiotGames.LeagueV4;
 using Camille.RiotGames.SummonerV4;
 using OTPBUILD.Models;
+using ShellProgressBar;
 
 namespace OTPBUILD.Services;
 
 public class FetchOtps(RiotGamesApi riotApi)
 {
-    public Dictionary<PlatformRoute, List<Player>> Players { get; set; } = new();
     public List<Champion> Champions { get; } = [];
     public List<PlatformRoute> PlatformRoutes { get; } = [];
     public Dictionary<Summoner, ChampionMastery[]> ChampionMasteries { get; } = new();
@@ -22,9 +23,8 @@ public class FetchOtps(RiotGamesApi riotApi)
         PlatformRoutes = platformRoutes;
     }
 
-    public int FindPlayers()
+    public Dictionary<PlatformRoute, List<Player>> FindPlayers()
     {
-        var count = 0;
         var players = new ConcurrentDictionary<PlatformRoute, List<Player>>();
 
         Parallel.ForEach(PlatformRoutes, platform =>
@@ -37,24 +37,29 @@ public class FetchOtps(RiotGamesApi riotApi)
                 {
                     var player = new Player(summoner, champion);
                     list.Add(player);
-                    Interlocked.Increment(ref count);
                 }
             });
 
             players[platform] = list.ToList();
         });
 
-        Players = players.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        return count;
+        return players.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
     }
 
     public async Task SetSummonersAsync(int? limit = null, List<string>? summonerIds = null)
     {
         var entries = new Dictionary<PlatformRoute, List<LeagueItem>>();
 
+        var pbarPlatform = new ProgressBar(PlatformRoutes.Count, "Fetching entries", new ProgressBarOptions()
+        {
+            ProgressCharacter = '─',
+            ForegroundColor = ConsoleColor.Yellow,
+            DisplayTimeInRealTime = true
+        });
+
         foreach (var platform in PlatformRoutes)
         {
-            List<LeagueItem> leagueEntries = new();
+            List<LeagueItem> leagueEntries = [];
 
             try
             {
@@ -76,26 +81,40 @@ public class FetchOtps(RiotGamesApi riotApi)
                     .ToList();
 
             if (limit is not null) leagueEntries = leagueEntries.Take(limit.Value).ToList();
-            Console.WriteLine($"Platform: {platform} total entries: {leagueEntries.Count}");
 
             entries.Add(platform, leagueEntries);
+
+            pbarPlatform.Tick($"Platform: {platform} {pbarPlatform.CurrentTick + 1}/{pbarPlatform.MaxTicks}");
         }
 
-        Console.WriteLine("Starting to fetch summoners...");
+        using var pbar = new ProgressBar(entries.Count, "", new ProgressBarOptions
+        {
+            ProgressCharacter = '─',
+            ForegroundColor = ConsoleColor.Blue,
+            DisplayTimeInRealTime = true
+        });
+
         var countPlatform = 0;
         var tasks = new List<Task>();
-        var semaphore = new SemaphoreSlim(100); // Limit to 100 concurrent tasks
+        var semaphore = new SemaphoreSlim(100);
 
         foreach (var (platform, platformEntries) in entries)
         {
             countPlatform++;
             var countLeagueItem = 0;
 
+            using var childPbar = pbar.Spawn(platformEntries.Count, "",
+                new ProgressBarOptions
+                {
+                    ForegroundColor = ConsoleColor.DarkCyan, ProgressCharacter = '─', ShowEstimatedDuration = true,
+                    DisplayTimeInRealTime = true
+                });
+
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
             foreach (var leagueItem in platformEntries)
             {
                 countLeagueItem++;
-                Console.WriteLine(
-                    $"Platform: {countPlatform}/{entries.Count} leagueItem: {countLeagueItem}/{platformEntries.Count}");
 
                 await semaphore.WaitAsync();
                 tasks.Add(Task.Run(async () =>
@@ -117,9 +136,23 @@ public class FetchOtps(RiotGamesApi riotApi)
                     finally
                     {
                         semaphore.Release();
+
+                        try
+                        {
+                            var estimatedTime = stopwatch.Elapsed.TotalSeconds / countLeagueItem *
+                                                platformEntries.Count;
+                            childPbar.Tick(message: $"{childPbar.CurrentTick + 1}/{childPbar.MaxTicks} summoners fetched",
+                                estimatedDuration: TimeSpan.FromSeconds(estimatedTime));
+
+                        }
+                        catch (Exception e)
+                        {
+                            childPbar.Tick();
+                        }
                     }
                 }));
             }
+            pbar.Tick($"Platform: {platform} {pbar.CurrentTick + 1}/{pbar.MaxTicks}");
         }
 
         await Task.WhenAll(tasks);
