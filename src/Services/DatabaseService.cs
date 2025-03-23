@@ -212,8 +212,10 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return (int)idParam.Value;
     }
 
-    public async Task<int> InsertPlayerAsync(Player player)
+    public async Task<int> InsertPlayerAsync(Player player, PlatformRoute platformRoute)
     {
+        await InsertSummonerAsync(player.Summoner, platformRoute);
+
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
