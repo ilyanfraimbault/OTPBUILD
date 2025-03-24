@@ -164,11 +164,11 @@ create table Summoners
 );
 
 create view championstats as
-select P.Champion                                                               AS Champion,
+select P.Champion                                                         AS Champion,
        (count(0) / (select count(0)
                     from otpbuild.participants
                     where (otpbuild.participants.Champion = P.Champion))) AS winRate,
-       count(0)                                                                     AS gamesPlayed
+       count(0)                                                           AS gamesPlayed
 from (otpbuild.participants P join otpbuild.games G on ((G.GameId = P.GameId)))
 where (P.TeamId = G.Winner)
 group by P.Champion
@@ -219,9 +219,9 @@ select G.GameDuration                 AS GameDuration,
        P.SummonerSpell1               AS SummonerSpell1,
        P.SummonerSpell2               AS SummonerSpell2,
        P.TeamPosition                 AS TeamPosition,
-       otpbuild.statperks.defense   AS defense,
-       otpbuild.statperks.flex      AS flex,
-       otpbuild.statperks.offense   AS offense,
+       otpbuild.statperks.defense     AS defense,
+       otpbuild.statperks.flex        AS flex,
+       otpbuild.statperks.offense     AS offense,
        primaryStyle.description       AS primaryStyleDescription,
        primaryStyle.style             AS primaryStyle,
        primaryStyle.styleSelection1   AS primStyleSelection1,
@@ -274,7 +274,7 @@ from (((((((((((((otpbuild.games G join otpbuild.participants P
 create view lastgamestarttimestampbyplayers as
 select otpbuild.lastgamestarttimestampbyplayers.SummonerPuuid          AS SummonerPuuid,
        otpbuild.lastgamestarttimestampbyplayers.LastGameStartTimestamp AS LastGameStartTimestamp,
-       P.Champion                            AS Champion
+       P.Champion                                                      AS Champion
 from (otpbuild.lastgamestarttimestampbysummoner LST join otpbuild.players P
       on ((otpbuild.lastgamestarttimestampbyplayers.SummonerPuuid = P.SummonerPuuid)));
 
@@ -302,17 +302,18 @@ select (blue.blueSide / (blue.blueSide + red.redSide)) AS blueWinRate,
 from ((select count(0) AS blueSide
        from otpbuild.games
        where (otpbuild.games.Winner = '100')) blue join (select count(0) AS redSide
-                                                                 from otpbuild.games
-                                                                 where (otpbuild.games.Winner = '200')) red);
+                                                         from otpbuild.games
+                                                         where (otpbuild.games.Winner = '200')) red);
 
 create view summonerchampionplayrates as
-select P.SummonerPuuid                                                                                        AS SummonerPuuid,
-       P.Champion                                                                                             AS Champion,
+select P.SummonerPuuid                                                                                     AS SummonerPuuid,
+       P.Champion                                                                                          AS Champion,
        (otpbuild.gamesplayedbychampionsummoner.gamesPlayed / (select count(0)
-                                         from otpbuild.participants P2
-                                         where (P2.SummonerPuuid = P.SummonerPuuid)))                     AS PlayRate
+                                                              from otpbuild.participants P2
+                                                              where (P2.SummonerPuuid = P.SummonerPuuid))) AS PlayRate
 from (otpbuild.players P join otpbuild.gamesplayedbychampionsummoner GP
-      on (((P.SummonerPuuid = otpbuild.gamesplayedbychampionsummoner.SummonerPuuid) and (P.Champion = otpbuild.gamesplayedbychampionsummoner.Champion))));
+      on (((P.SummonerPuuid = otpbuild.gamesplayedbychampionsummoner.SummonerPuuid) and
+           (P.Champion = otpbuild.gamesplayedbychampionsummoner.Champion))));
 
 create view summonersbyplatformid as
 select S.PlatformId AS PlatformId, count(0) AS Count
@@ -338,7 +339,7 @@ select P.SummonerPuuid AS SummonerPuuid,
        sum(P.Kills)    AS Kills,
        sum(P.Deaths)   AS Deaths,
        sum(P.Assists)  AS Assists,
-       count(0)            AS GamesPlayed
+       count(0)        AS GamesPlayed
 from otpbuild.participants P
 group by P.SummonerPuuid, P.Champion;
 
