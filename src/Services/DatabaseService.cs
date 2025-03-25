@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using Camille.Enums;
@@ -403,7 +404,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return games.Values.ToList();
     }
 
-    public async Task<List<(string, PlatformRoute)>> GetMatchIdsAsync()
+    public async Task<ConcurrentDictionary<PlatformRoute, ConcurrentDictionary<string, bool>>> GetMatchIdsAsync()
     {
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
@@ -412,12 +413,14 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         await using var command = new MySqlCommand(query, connection);
 
         await using var reader = await command.ExecuteReaderAsync();
-        List<(string, PlatformRoute)> matchIds = [];
+        ConcurrentDictionary<PlatformRoute, ConcurrentDictionary<string, bool>> matchIds = new();
+
         while (await reader.ReadAsync())
         {
             var id = reader.GetString("MatchId");
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
-            matchIds.Add((id, platform));
+            if (!matchIds.ContainsKey(platform)) matchIds[platform] = new ConcurrentDictionary<string, bool>();
+            matchIds[platform][id] = true;
         }
 
         return matchIds;
