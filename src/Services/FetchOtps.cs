@@ -12,9 +12,9 @@ namespace OTPBUILD.Services;
 
 public class FetchOtps(RiotGamesApi riotApi)
 {
-    public List<Champion> Champions { get; } = [];
-    public List<PlatformRoute> PlatformRoutes { get; } = [];
-    public Dictionary<Summoner, ChampionMastery[]> ChampionMasteries { get; } = new();
+    private List<Champion> Champions { get; } = [];
+    private List<PlatformRoute> PlatformRoutes { get; } = [];
+    private Dictionary<Summoner, ChampionMastery[]> ChampionMasteries { get; } = new();
 
     public FetchOtps(List<Champion> champions, List<PlatformRoute> platformRoutes, RiotGamesApi riotApi)
         : this(riotApi)
@@ -94,13 +94,11 @@ public class FetchOtps(RiotGamesApi riotApi)
             DisplayTimeInRealTime = true
         });
 
-        var countPlatform = 0;
         var tasks = new List<Task>();
         var semaphore = new SemaphoreSlim(100);
 
         foreach (var (platform, platformEntries) in entries)
         {
-            countPlatform++;
             var countLeagueItem = 0;
 
             using var childPbar = pbar.Spawn(platformEntries.Count, "",
@@ -145,7 +143,7 @@ public class FetchOtps(RiotGamesApi riotApi)
                                 estimatedDuration: TimeSpan.FromSeconds(estimatedTime));
 
                         }
-                        catch (Exception e)
+                        catch (Exception)
                         {
                             childPbar.Tick();
                         }

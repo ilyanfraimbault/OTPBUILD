@@ -314,17 +314,15 @@ public class DatabaseService(DatabaseConnection databaseConnection)
                 reader.GetInt32("Kills"),
                 reader.GetInt32("Deaths"),
                 reader.GetInt32("Assists"),
-                new List<int>
-                {
+                [
                     reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
                     reader.GetInt32("Item3"), reader.GetInt32("Item4"), reader.GetInt32("Item5"),
                     reader.GetInt32("Item6")
-                },
-                new List<int>
-                {
+                ],
+                [
                     reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
                     reader.GetInt32("SpellCast4")
-                },
+                ],
                 (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
                 perks,
                 reader.GetString("GameName"),
@@ -404,7 +402,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return games.Values.ToList();
     }
 
-    public async Task<ConcurrentDictionary<PlatformRoute, ConcurrentDictionary<string, bool>>> GetMatchIdsAsync()
+    public async Task<ConcurrentDictionary<PlatformRoute, ConcurrentBag<string>>> GetMatchIdsAsync()
     {
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
@@ -413,14 +411,14 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         await using var command = new MySqlCommand(query, connection);
 
         await using var reader = await command.ExecuteReaderAsync();
-        ConcurrentDictionary<PlatformRoute, ConcurrentDictionary<string, bool>> matchIds = new();
+        ConcurrentDictionary<PlatformRoute, ConcurrentBag<string>> matchIds = new();
 
         while (await reader.ReadAsync())
         {
             var id = reader.GetString("MatchId");
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
-            if (!matchIds.ContainsKey(platform)) matchIds[platform] = new ConcurrentDictionary<string, bool>();
-            matchIds[platform][id] = true;
+            if (!matchIds.ContainsKey(platform)) matchIds[platform] = [];
+            matchIds[platform].Add(id);
         }
 
         return matchIds;
