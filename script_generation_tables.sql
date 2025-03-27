@@ -19,6 +19,111 @@ create table Games
     primary key (GameId)
 );
 
+create table StatPerks
+(
+    id      int auto_increment
+        primary key,
+    defense int not null,
+    flex    int not null,
+    offense int not null,
+    constraint unique_stats
+        unique (defense, flex, offense)
+);
+
+create table StyleSelection
+(
+    id   int auto_increment
+        primary key,
+    perk int not null,
+    var1 int not null,
+    var2 int not null,
+    var3 int not null,
+    constraint perk
+        unique (perk, var1, var2, var3)
+);
+
+create table PerksStyle
+(
+    id              int auto_increment
+        primary key,
+    description     varchar(50) not null,
+    style           int         not null,
+    styleSelection1 int         not null,
+    styleSelection2 int         not null,
+    styleSelection3 int         null,
+    styleSelection4 int         null,
+    constraint description
+        unique (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4),
+    constraint PerksStyle_ibfk_1
+        foreign key (styleSelection1) references StyleSelection (id)
+            on update cascade on delete cascade,
+    constraint PerksStyle_ibfk_2
+        foreign key (styleSelection2) references StyleSelection (id)
+            on update cascade on delete cascade,
+    constraint PerksStyle_ibfk_3
+        foreign key (styleSelection3) references StyleSelection (id)
+            on update cascade on delete cascade,
+    constraint PerksStyle_ibfk_4
+        foreign key (styleSelection4) references StyleSelection (id)
+            on update cascade on delete cascade
+);
+
+create table Perks
+(
+    id             int auto_increment
+        primary key,
+    statPerks      int not null,
+    primaryStyle   int not null,
+    secondaryStyle int not null,
+    constraint Perks_statPerks_primaryStyle_secondaryStyle_uindex
+        unique (statPerks, primaryStyle, secondaryStyle),
+    constraint statPerks_2
+        unique (statPerks, primaryStyle, secondaryStyle),
+    constraint Perks_ibfk_1
+        foreign key (statPerks) references StatPerks (id)
+            on update cascade on delete cascade,
+    constraint Perks_ibfk_2
+        foreign key (primaryStyle) references PerksStyle (id)
+            on update cascade on delete cascade,
+    constraint Perks_ibfk_3
+        foreign key (secondaryStyle) references PerksStyle (id)
+            on update cascade on delete cascade
+);
+
+create index primaryStyle
+    on Perks (primaryStyle);
+
+create index secondaryStyle
+    on Perks (secondaryStyle);
+
+create index statPerks
+    on Perks (statPerks);
+
+create index styleSelection1
+    on PerksStyle (styleSelection1);
+
+create index styleSelection2
+    on PerksStyle (styleSelection2);
+
+create index styleSelection3
+    on PerksStyle (styleSelection3);
+
+create index styleSelection4
+    on PerksStyle (styleSelection4);
+
+create table Summoners
+(
+    Id            varchar(63) not null,
+    Puuid         varchar(78) not null,
+    Name          varchar(50) null,
+    AccountId     varchar(56) null,
+    ProfileIconId int         null,
+    RevisionDate  bigint      null,
+    Level         bigint      null,
+    PlatformId    varchar(10) not null,
+    primary key (Puuid)
+);
+
 create table Participants
 (
     GameId         bigint      not null,
@@ -61,66 +166,6 @@ create index Perks
 create index SummonerPuuid
     on Participants (SummonerPuuid);
 
-create table Perks
-(
-    id             int auto_increment
-        primary key,
-    statPerks      int not null,
-    primaryStyle   int not null,
-    secondaryStyle int not null,
-    constraint Perks_statPerks_primaryStyle_secondaryStyle_uindex
-        unique (statPerks, primaryStyle, secondaryStyle),
-    constraint statPerks_2
-        unique (statPerks, primaryStyle, secondaryStyle),
-    constraint Perks_ibfk_1
-        foreign key (statPerks) references StatPerks (id),
-    constraint Perks_ibfk_2
-        foreign key (primaryStyle) references PerksStyle (id),
-    constraint Perks_ibfk_3
-        foreign key (secondaryStyle) references PerksStyle (id)
-);
-
-create index primaryStyle
-    on Perks (primaryStyle);
-
-create index secondaryStyle
-    on Perks (secondaryStyle);
-
-create index statPerks
-    on Perks (statPerks);
-
-create table PerksStyle
-(
-    id              int auto_increment
-        primary key,
-    description     varchar(50) not null,
-    style           int         not null,
-    styleSelection1 int         not null,
-    styleSelection2 int         not null,
-    styleSelection3 int         null,
-    styleSelection4 int         null,
-    constraint PerksStyle_ibfk_1
-        foreign key (styleSelection1) references StyleSelection (id),
-    constraint PerksStyle_ibfk_2
-        foreign key (styleSelection2) references StyleSelection (id),
-    constraint PerksStyle_ibfk_3
-        foreign key (styleSelection3) references StyleSelection (id),
-    constraint PerksStyle_ibfk_4
-        foreign key (styleSelection4) references StyleSelection (id)
-);
-
-create index styleSelection1
-    on PerksStyle (styleSelection1);
-
-create index styleSelection2
-    on PerksStyle (styleSelection2);
-
-create index styleSelection3
-    on PerksStyle (styleSelection3);
-
-create index styleSelection4
-    on PerksStyle (styleSelection4);
-
 create table Players
 (
     SummonerPuuid varchar(78) not null,
@@ -131,63 +176,37 @@ create table Players
             on update cascade on delete cascade
 );
 
-create table StatPerks
-(
-    id      int auto_increment
-        primary key,
-    defense int not null,
-    flex    int not null,
-    offense int not null
-);
+create view FindNewPlayers as
+select GPCS.SummonerPuuid                                   AS SummonerPuuid,
+       GPCS.Champion                                        AS Champion,
+       GPCS.GamesPlayed                                     AS GamesPlayed,
+       TotalGamesPlayed.TOTAL                                          AS TOTAL,
+       avg((GPCS.GamesPlayed / TotalGamesPlayed.TOTAL)) AS PlayRate
+from (Gamesplayedbychampionsummoner GPCS join (select P.SummonerPuuid AS SummonerPuuid, count(0) AS TOTAL
+                                                              from Participants P
+                                                              group by P.SummonerPuuid) TotalGamesPlayed
+      on ((TotalGamesPlayed.SummonerPuuid = GPCS.SummonerPuuid)))
+where exists(select 1
+             from Players P
+             where ((P.SummonerPuuid = GPCS.SummonerPuuid) and
+                    (P.Champion = GPCS.Champion))) is false
+group by GPCS.Champion, GPCS.GamesPlayed, GPCS.SummonerPuuid
+order by (GPCS.GamesPlayed * PlayRate) desc;
 
-create table StyleSelection
-(
-    id   int auto_increment
-        primary key,
-    perk int not null,
-    var1 int not null,
-    var2 int not null,
-    var3 int not null
-);
-
-create table Summoners
-(
-    Id            varchar(63) not null,
-    Puuid         varchar(78) not null,
-    Name          varchar(50) null,
-    AccountId     varchar(56) null,
-    ProfileIconId int         null,
-    RevisionDate  bigint      null,
-    Level         bigint      null,
-    PlatformId    varchar(10) not null,
-    primary key (Puuid)
-);
-
-create view championstats as
-select P.Champion                                                         AS Champion,
-       (count(0) / (select count(0)
-                    from otpbuild.participants
-                    where (otpbuild.participants.Champion = P.Champion))) AS winRate,
-       count(0)                                                           AS gamesPlayed
-from (otpbuild.participants P join otpbuild.games G on ((G.GameId = P.GameId)))
-where (P.TeamId = G.Winner)
-group by P.Champion
-order by count(0);
-
-create view gamesplayedbychampionsummoner as
-select P.SummonerPuuid AS SummonerPuuid, P.Champion AS Champion, count(0) AS gamesPlayed
-from otpbuild.participants P
+create view Gamesplayedbychampionsummoner as
+select P.SummonerPuuid AS SummonerPuuid, P.Champion AS Champion, count(0) AS GamesPlayed
+from Participants P
 group by P.SummonerPuuid, P.Champion
 order by count(0) desc;
 
-create view gamesplayedbyplatformid as
+create view Gamesplayedbyplatformid as
 select G.PlatformId AS PlatformId, count(0) AS GamesPlayed
-from otpbuild.games G
+from Games G
 group by G.PlatformId;
 
-create view gamesview as
+create view Gamesview as
 select G.GameDuration                 AS GameDuration,
-       G.GameStartTimestamp           AS GameStartTimestamp,
+       G.GameStartTimestamp           AS GamestartTimestamp,
        G.GameId                       AS GameId,
        G.GameVersion                  AS GameVersion,
        G.GameType                     AS GameType,
@@ -216,12 +235,12 @@ select G.GameDuration                 AS GameDuration,
        P.spellCast2                   AS spellCast2,
        P.spellCast3                   AS spellCast3,
        P.spellCast4                   AS spellCast4,
-       P.SummonerSpell1               AS SummonerSpell1,
-       P.SummonerSpell2               AS SummonerSpell2,
+       P.SummonerSpell1               AS Summonerspell1,
+       P.SummonerSpell2               AS Summonerspell2,
        P.TeamPosition                 AS TeamPosition,
-       otpbuild.statperks.defense     AS defense,
-       otpbuild.statperks.flex        AS flex,
-       otpbuild.statperks.offense     AS offense,
+       StatPerks.defense   AS defense,
+       StatPerks.flex      AS flex,
+       StatPerks.offense   AS offense,
        primaryStyle.description       AS primaryStyleDescription,
        primaryStyle.style             AS primaryStyle,
        primaryStyle.styleSelection1   AS primStyleSelection1,
@@ -256,71 +275,36 @@ select G.GameDuration                 AS GameDuration,
        secStyleSelection2.var1        AS secStyleSelection2Var1,
        secStyleSelection2.var2        AS secStyleSelection2Var2,
        secStyleSelection2.var3        AS secStyleSelection2Var3
-from (((((((((((((otpbuild.games G join otpbuild.participants P
-                  on ((G.GameId = P.GameId))) join otpbuild.summoners S
-                 on ((P.SummonerPuuid = S.Puuid))) join otpbuild.accounts A
-                on ((S.Puuid = A.Puuid))) join otpbuild.perks P2
-               on ((P2.id = P.Perks))) join otpbuild.perksstyle primaryStyle
-              on ((primaryStyle.id = P2.primaryStyle))) join otpbuild.perksstyle secondaryStyle
-             on ((secondaryStyle.id = P2.secondaryStyle))) join otpbuild.styleselection primStyleSelection1
-            on ((primStyleSelection1.id = primaryStyle.styleSelection1))) join otpbuild.styleselection primStyleSelection2
-           on ((primStyleSelection2.id = primaryStyle.styleSelection2))) join otpbuild.styleselection primStyleSelection3
-          on ((primStyleSelection3.id = primaryStyle.styleSelection3))) join otpbuild.styleselection primStyleSelection4
-         on ((primStyleSelection4.id = primaryStyle.styleSelection4))) join otpbuild.styleselection secStyleSelection1
-        on ((secStyleSelection1.id = secondaryStyle.styleSelection1))) join otpbuild.styleselection secStyleSelection2
-       on ((secStyleSelection2.id = secondaryStyle.styleSelection2))) join otpbuild.statperks
-      on ((otpbuild.statperks.id = P2.statPerks)));
+from (((((((((((((Games G join Participants P
+                  on ((G.GameId = P.GameId))) join Summoners S
+                 on ((P.SummonerPuuid = S.Puuid))) join Accounts A
+                on ((S.Puuid = A.Puuid))) join Perks P2
+               on ((P2.id = P.Perks))) join PerksStyle primaryStyle
+              on ((primaryStyle.id = P2.primaryStyle))) join PerksStyle secondaryStyle
+             on ((secondaryStyle.id = P2.secondaryStyle))) join StyleSelection primStyleSelection1
+            on ((primStyleSelection1.id = primaryStyle.styleSelection1))) join StyleSelection primStyleSelection2
+           on ((primStyleSelection2.id = primaryStyle.styleSelection2))) join StyleSelection primStyleSelection3
+          on ((primStyleSelection3.id = primaryStyle.styleSelection3))) join StyleSelection primStyleSelection4
+         on ((primStyleSelection4.id = primaryStyle.styleSelection4))) join StyleSelection secStyleSelection1
+        on ((secStyleSelection1.id = secondaryStyle.styleSelection1))) join StyleSelection secStyleSelection2
+       on ((secStyleSelection2.id = secondaryStyle.styleSelection2))) join StatPerks
+      on ((StatPerks.id = P2.statPerks)));
 
-create view lastgamestarttimestampbyplayers as
-select otpbuild.lastgamestarttimestampbyplayers.SummonerPuuid          AS SummonerPuuid,
-       otpbuild.lastgamestarttimestampbyplayers.LastGameStartTimestamp AS LastGameStartTimestamp,
-       P.Champion                                                      AS Champion
-from (otpbuild.lastgamestarttimestampbysummoner LST join otpbuild.players P
-      on ((otpbuild.lastgamestarttimestampbyplayers.SummonerPuuid = P.SummonerPuuid)));
+create view SummonerChampionPlayRates as
+select P.SummonerPuuid                                                                                        AS SummonerPuuid,
+       P.Champion                                                                                             AS Champion,
+       (G.GamesPlayed / (select count(0)
+                                        from Participants P2
+                                        where (P2.SummonerPuuid = P.SummonerPuuid)))                      AS PlayRate
+from (Players P join Gamesplayedbychampionsummoner G
+      on (((P.Champion = G.Champion) and (P.SummonerPuuid = G.SummonerPuuid))));
 
-create view lastgamestarttimestampbysummoner as
-select S.Puuid AS SummonerPuuid, coalesce(max(G.GameStartTimestamp), 0) AS LastGameStartTimestamp
-from ((otpbuild.summoners S left join otpbuild.participants P
-       on ((S.Puuid = P.SummonerPuuid))) left join otpbuild.games G on ((P.GameId = G.GameId)))
-group by S.Puuid;
-
-create view playerchampionstats as
-select A.Puuid          AS Puuid,
-       A.GameName       AS GameName,
-       A.TagLine        AS TagLine,
-       P.Champion       AS Champion,
-       count(P2.GameId) AS GamesPlayed
-from ((otpbuild.players P left join otpbuild.accounts A
-       on ((P.SummonerPuuid = A.Puuid))) left join otpbuild.participants P2
-      on (((P.Champion = P2.Champion) and (P2.SummonerPuuid = P.SummonerPuuid))))
-group by A.GameName, A.TagLine, P.Champion, A.Puuid
-order by count(P2.GameId) desc;
-
-create view sidewinrate as
-select (blue.blueSide / (blue.blueSide + red.redSide)) AS blueWinRate,
-       (red.redSide / (blue.blueSide + red.redSide))   AS redWinRate
-from ((select count(0) AS blueSide
-       from otpbuild.games
-       where (otpbuild.games.Winner = '100')) blue join (select count(0) AS redSide
-                                                         from otpbuild.games
-                                                         where (otpbuild.games.Winner = '200')) red);
-
-create view summonerchampionplayrates as
-select P.SummonerPuuid                                                                                     AS SummonerPuuid,
-       P.Champion                                                                                          AS Champion,
-       (otpbuild.gamesplayedbychampionsummoner.gamesPlayed / (select count(0)
-                                                              from otpbuild.participants P2
-                                                              where (P2.SummonerPuuid = P.SummonerPuuid))) AS PlayRate
-from (otpbuild.players P join otpbuild.gamesplayedbychampionsummoner GP
-      on (((P.SummonerPuuid = otpbuild.gamesplayedbychampionsummoner.SummonerPuuid) and
-           (P.Champion = otpbuild.gamesplayedbychampionsummoner.Champion))));
-
-create view summonersbyplatformid as
+create view Summonersbyplatformid as
 select S.PlatformId AS PlatformId, count(0) AS Count
-from otpbuild.summoners S
+from Summoners S
 group by S.PlatformId;
 
-create view summonersorderedbygamesplayed as
+create view SummonersorderedbyGamesplayed as
 select S.Id            AS Id,
        S.Puuid         AS Puuid,
        S.Name          AS Name,
@@ -329,19 +313,64 @@ select S.Id            AS Id,
        S.RevisionDate  AS RevisionDate,
        S.Level         AS Level,
        S.PlatformId    AS PlatformId
-from (otpbuild.summoners S left join otpbuild.participants P on ((P.SummonerPuuid = S.Puuid)))
+from (Summoners S left join Participants P on ((P.SummonerPuuid = S.Puuid)))
 group by S.Puuid
 order by count(P.GameId);
 
-create view summonerstatsbychampion as
+create view Summonerstatsbychampion as
 select P.SummonerPuuid AS SummonerPuuid,
        P.Champion      AS Champion,
        sum(P.Kills)    AS Kills,
        sum(P.Deaths)   AS Deaths,
        sum(P.Assists)  AS Assists,
-       count(0)        AS GamesPlayed
-from otpbuild.participants P
+       count(0)            AS GamesPlayed
+from Participants P
 group by P.SummonerPuuid, P.Champion;
+
+create view championstats as
+select P.Champion                                                               AS Champion,
+       (count(0) / (select count(0)
+                    from Participants
+                    where (Participants.Champion = P.Champion))) AS winRate,
+       count(0)                                                                     AS GamesPlayed
+from (Participants P join Games G on ((G.GameId = P.GameId)))
+where (P.TeamId = G.Winner)
+group by P.Champion
+order by count(0);
+
+create view lastGamestarttimestampbyPlayers as
+select LST.SummonerPuuid          AS SummonerPuuid,
+       LST.LastGamestartTimestamp AS LastGamestartTimestamp,
+       P.Champion                            AS Champion
+from (lastGamestarttimestampbysummoner LST join Players P
+      on ((LST.SummonerPuuid = P.SummonerPuuid)));
+
+create view lastGamestarttimestampbysummoner as
+select S.Puuid AS SummonerPuuid, coalesce(max(G.GameStartTimestamp), 0) AS LastGamestartTimestamp
+from ((Summoners S left join Participants P
+       on ((S.Puuid = P.SummonerPuuid))) left join Games G on ((P.GameId = G.GameId)))
+group by S.Puuid;
+
+create view playerchampionstats as
+select A.Puuid          AS Puuid,
+       A.GameName       AS GameName,
+       A.TagLine        AS TagLine,
+       P.Champion       AS Champion,
+       count(P2.GameId) AS GamesPlayed
+from ((Players P left join Accounts A
+       on ((P.SummonerPuuid = A.Puuid))) left join Participants P2
+      on (((P.Champion = P2.Champion) and (P2.SummonerPuuid = P.SummonerPuuid))))
+group by A.GameName, A.TagLine, P.Champion, A.Puuid
+order by count(P2.GameId) desc;
+
+create view sidewinrate as
+select (blue.blueSide / (blue.blueSide + red.redSide)) AS blueWinRate,
+       (red.redSide / (blue.blueSide + red.redSide))   AS redWinRate
+from ((select count(0) AS blueSide
+       from Games
+       where (Games.Winner = '100')) blue join (select count(0) AS redSide
+                                                                 from Games
+                                                                 where (Games.Winner = '200')) red);
 
 create procedure insertAccount(IN p_Puuid varchar(78), IN p_GameName varchar(50), IN p_TagLine varchar(50))
 BEGIN
