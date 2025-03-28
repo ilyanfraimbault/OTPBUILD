@@ -177,19 +177,18 @@ create table Players
 );
 
 create view FindNewPlayers as
-select GPCS.SummonerPuuid                                   AS SummonerPuuid,
-       GPCS.Champion                                        AS Champion,
-       GPCS.GamesPlayed                                     AS GamesPlayed,
-       TotalGamesPlayed.TOTAL                                          AS TOTAL,
+select GPCS.SummonerPuuid                               AS SummonerPuuid,
+       GPCS.Champion                                    AS Champion,
+       GPCS.GamesPlayed                                 AS GamesPlayed,
+       TotalGamesPlayed.TOTAL                           AS TOTAL,
        avg((GPCS.GamesPlayed / TotalGamesPlayed.TOTAL)) AS PlayRate
 from (Gamesplayedbychampionsummoner GPCS join (select P.SummonerPuuid AS SummonerPuuid, count(0) AS TOTAL
-                                                              from Participants P
-                                                              group by P.SummonerPuuid) TotalGamesPlayed
+                                               from Participants P
+                                               group by P.SummonerPuuid) TotalGamesPlayed
       on ((TotalGamesPlayed.SummonerPuuid = GPCS.SummonerPuuid)))
 where exists(select 1
              from Players P
-             where ((P.SummonerPuuid = GPCS.SummonerPuuid) and
-                    (P.Champion = GPCS.Champion))) is false
+             where ((P.SummonerPuuid = GPCS.SummonerPuuid) and (P.Champion = GPCS.Champion))) is false
 group by GPCS.Champion, GPCS.GamesPlayed, GPCS.SummonerPuuid
 order by (GPCS.GamesPlayed * PlayRate) desc;
 
@@ -238,9 +237,9 @@ select G.GameDuration                 AS GameDuration,
        P.SummonerSpell1               AS Summonerspell1,
        P.SummonerSpell2               AS Summonerspell2,
        P.TeamPosition                 AS TeamPosition,
-       StatPerks.defense   AS defense,
-       StatPerks.flex      AS flex,
-       StatPerks.offense   AS offense,
+       StatPerks.defense              AS defense,
+       StatPerks.flex                 AS flex,
+       StatPerks.offense              AS offense,
        primaryStyle.description       AS primaryStyleDescription,
        primaryStyle.style             AS primaryStyle,
        primaryStyle.styleSelection1   AS primStyleSelection1,
@@ -275,8 +274,7 @@ select G.GameDuration                 AS GameDuration,
        secStyleSelection2.var1        AS secStyleSelection2Var1,
        secStyleSelection2.var2        AS secStyleSelection2Var2,
        secStyleSelection2.var3        AS secStyleSelection2Var3
-from (((((((((((((Games G join Participants P
-                  on ((G.GameId = P.GameId))) join Summoners S
+from (((((((((((((Games G join Participants P on ((G.GameId = P.GameId))) join Summoners S
                  on ((P.SummonerPuuid = S.Puuid))) join Accounts A
                 on ((S.Puuid = A.Puuid))) join Perks P2
                on ((P2.id = P.Perks))) join PerksStyle primaryStyle
@@ -290,12 +288,18 @@ from (((((((((((((Games G join Participants P
        on ((secStyleSelection2.id = secondaryStyle.styleSelection2))) join StatPerks
       on ((StatPerks.id = P2.statPerks)));
 
+create view LastGameStartTimestampByPlayers as
+select LST.SummonerPuuid          AS SummonerPuuid,
+       LST.LastGamestartTimestamp AS LastGamestartTimestamp,
+       P.Champion                 AS Champion
+from (lastGamestarttimestampbysummoner LST join Players P
+      on ((LST.SummonerPuuid = P.SummonerPuuid)));
+
 create view SummonerChampionPlayRates as
-select P.SummonerPuuid                                                                                        AS SummonerPuuid,
-       P.Champion                                                                                             AS Champion,
-       (G.GamesPlayed / (select count(0)
-                                        from Participants P2
-                                        where (P2.SummonerPuuid = P.SummonerPuuid)))                      AS PlayRate
+select P.SummonerPuuid                                                                     AS SummonerPuuid,
+       P.Champion                                                                          AS Champion,
+       (G.GamesPlayed /
+        (select count(0) from Participants P2 where (P2.SummonerPuuid = P.SummonerPuuid))) AS PlayRate
 from (Players P join Gamesplayedbychampionsummoner G
       on (((P.Champion = G.Champion) and (P.SummonerPuuid = G.SummonerPuuid))));
 
@@ -323,27 +327,20 @@ select P.SummonerPuuid AS SummonerPuuid,
        sum(P.Kills)    AS Kills,
        sum(P.Deaths)   AS Deaths,
        sum(P.Assists)  AS Assists,
-       count(0)            AS GamesPlayed
+       count(0)        AS GamesPlayed
 from Participants P
 group by P.SummonerPuuid, P.Champion;
 
 create view championstats as
-select P.Champion                                                               AS Champion,
+select P.Champion                                                AS Champion,
        (count(0) / (select count(0)
                     from Participants
                     where (Participants.Champion = P.Champion))) AS winRate,
-       count(0)                                                                     AS GamesPlayed
+       count(0)                                                  AS GamesPlayed
 from (Participants P join Games G on ((G.GameId = P.GameId)))
 where (P.TeamId = G.Winner)
 group by P.Champion
 order by count(0);
-
-create view lastGamestarttimestampbyPlayers as
-select LST.SummonerPuuid          AS SummonerPuuid,
-       LST.LastGamestartTimestamp AS LastGamestartTimestamp,
-       P.Champion                            AS Champion
-from (lastGamestarttimestampbysummoner LST join Players P
-      on ((LST.SummonerPuuid = P.SummonerPuuid)));
 
 create view lastGamestarttimestampbysummoner as
 select S.Puuid AS SummonerPuuid, coalesce(max(G.GameStartTimestamp), 0) AS LastGamestartTimestamp
@@ -369,8 +366,8 @@ select (blue.blueSide / (blue.blueSide + red.redSide)) AS blueWinRate,
 from ((select count(0) AS blueSide
        from Games
        where (Games.Winner = '100')) blue join (select count(0) AS redSide
-                                                                 from Games
-                                                                 where (Games.Winner = '200')) red);
+                                                from Games
+                                                where (Games.Winner = '200')) red);
 
 create procedure insertAccount(IN p_Puuid varchar(78), IN p_GameName varchar(50), IN p_TagLine varchar(50))
 BEGIN
