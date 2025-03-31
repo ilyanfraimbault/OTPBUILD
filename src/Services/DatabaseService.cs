@@ -231,105 +231,105 @@ public class DatabaseService(DatabaseConnection databaseConnection)
     private Task<GameParticipant> ReadParticipantFromReaderAsync(DbDataReader reader)
     {
         var perkStats = new PerkStats
-            {
-                Defense = reader.GetInt32("defense"),
-                Flex = reader.GetInt32("flex"),
-                Offense = reader.GetInt32("offense")
-            };
+        {
+            Defense = reader.GetInt32("defense"),
+            Flex = reader.GetInt32("flex"),
+            Offense = reader.GetInt32("offense")
+        };
 
-            var primaryStyle = new PerkStyle
-            {
-                Style = reader.GetInt32("primaryStyle"),
-                Description = reader.GetString("primaryStyleDescription"),
-                Selections =
-                [
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection1"),
-                        Var1 = reader.GetInt32("primStyleSelection1Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection1Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection1Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection2"),
-                        Var1 = reader.GetInt32("primStyleSelection2Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection2Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection2Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection3"),
-                        Var1 = reader.GetInt32("primStyleSelection3Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection3Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection3Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("primStyleSelection4"),
-                        Var1 = reader.GetInt32("primStyleSelection4Var1"),
-                        Var2 = reader.GetInt32("primStyleSelection4Var2"),
-                        Var3 = reader.GetInt32("primStyleSelection4Var3")
-                    }
-                ]
-            };
+        var primaryStyle = new PerkStyle
+        {
+            Style = reader.GetInt32("primaryStyle"),
+            Description = reader.GetString("primaryStyleDescription"),
+            Selections =
+            [
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection1"),
+                    Var1 = reader.GetInt32("primStyleSelection1Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection1Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection1Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection2"),
+                    Var1 = reader.GetInt32("primStyleSelection2Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection2Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection2Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection3"),
+                    Var1 = reader.GetInt32("primStyleSelection3Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection3Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection3Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("primStyleSelection4"),
+                    Var1 = reader.GetInt32("primStyleSelection4Var1"),
+                    Var2 = reader.GetInt32("primStyleSelection4Var2"),
+                    Var3 = reader.GetInt32("primStyleSelection4Var3")
+                }
+            ]
+        };
 
-            var secondaryStyle = new PerkStyle
-            {
-                Style = reader.GetInt32("secondaryStyle"),
-                Description = reader.GetString("secondaryStyleDescription"),
-                Selections =
-                [
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("secStyleSelection1"),
-                        Var1 = reader.GetInt32("secStyleSelection1Var1"),
-                        Var2 = reader.GetInt32("secStyleSelection1Var2"),
-                        Var3 = reader.GetInt32("secStyleSelection1Var3")
-                    },
-                    new PerkStyleSelection
-                    {
-                        Perk = reader.GetInt32("secStyleSelection2"),
-                        Var1 = reader.GetInt32("secStyleSelection2Var1"),
-                        Var2 = reader.GetInt32("secStyleSelection2Var2"),
-                        Var3 = reader.GetInt32("secStyleSelection2Var3")
-                    }
-                ]
-            };
+        var secondaryStyle = new PerkStyle
+        {
+            Style = reader.GetInt32("secondaryStyle"),
+            Description = reader.GetString("secondaryStyleDescription"),
+            Selections =
+            [
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("secStyleSelection1"),
+                    Var1 = reader.GetInt32("secStyleSelection1Var1"),
+                    Var2 = reader.GetInt32("secStyleSelection1Var2"),
+                    Var3 = reader.GetInt32("secStyleSelection1Var3")
+                },
+                new PerkStyleSelection
+                {
+                    Perk = reader.GetInt32("secStyleSelection2"),
+                    Var1 = reader.GetInt32("secStyleSelection2Var1"),
+                    Var2 = reader.GetInt32("secStyleSelection2Var2"),
+                    Var3 = reader.GetInt32("secStyleSelection2Var3")
+                }
+            ]
+        };
 
-            var perks = new Perks
-            {
-                StatPerks = perkStats,
-                Styles = [primaryStyle, secondaryStyle]
-            };
+        var perks = new Perks
+        {
+            StatPerks = perkStats,
+            Styles = [primaryStyle, secondaryStyle]
+        };
 
-            var participant = new GameParticipant(
-                reader.GetString("SummonerName"),
-                reader.GetString("SummonerId"),
-                reader.GetInt32("SummonerLevel"),
-                reader.GetString("SummonerPuuid"),
-                Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
-                Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
-                reader.GetString("TeamPosition"),
-                reader.GetInt32("Kills"),
-                reader.GetInt32("Deaths"),
-                reader.GetInt32("Assists"),
-                [
-                    reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
-                    reader.GetInt32("Item3"), reader.GetInt32("Item4"), reader.GetInt32("Item5"),
-                    reader.GetInt32("Item6")
-                ],
-                [
-                    reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
-                    reader.GetInt32("SpellCast4")
-                ],
-                (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
-                perks,
-                reader.GetString("GameName"),
-                reader.GetString("Tagline")
-            );
+        var participant = new GameParticipant(
+            reader.GetString("SummonerName"),
+            reader.GetString("SummonerId"),
+            reader.GetInt32("SummonerLevel"),
+            reader.GetString("SummonerPuuid"),
+            Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
+            Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
+            reader.GetString("TeamPosition"),
+            reader.GetInt32("Kills"),
+            reader.GetInt32("Deaths"),
+            reader.GetInt32("Assists"),
+            [
+                reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
+                reader.GetInt32("Item3"), reader.GetInt32("Item4"), reader.GetInt32("Item5"),
+                reader.GetInt32("Item6")
+            ],
+            [
+                reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
+                reader.GetInt32("SpellCast4")
+            ],
+            (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
+            perks,
+            reader.GetString("GameName"),
+            reader.GetString("Tagline")
+        );
 
-            return Task.FromResult(participant);
+        return Task.FromResult(participant);
     }
 
     public async Task<Game?> GetGameAsync(long gameId)
@@ -392,7 +392,8 @@ public class DatabaseService(DatabaseConnection databaseConnection)
                 var platformId = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
                 var winner = Enum.Parse<Team>(reader.GetInt32("Winner").ToString());
 
-                games[gameId] = new Game(gameDuration, gameStartTimestamp, gameId, gameVersion, gameType, matchId, platformId,
+                games[gameId] = new Game(gameDuration, gameStartTimestamp, gameId, gameVersion, gameType, matchId,
+                    platformId,
                     winner, []);
             }
 
@@ -430,7 +431,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         await connection.OpenAsync();
 
         var query =
-            "SELECT S.*, Champion FROM Players P JOIN OTPBUILD.Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = @SummonerPuuid";
+            "SELECT S.*, Champion FROM Players P JOIN Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = @SummonerPuuid";
         await using var command = new MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@SummonerPuuid", summonerPuuid);
 
@@ -444,7 +445,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return new Player(summoner, champion);
     }
 
-    public async Task<Dictionary<PlatformRoute, List<(Player, long)>>> GetPlayersAsync()
+    public async Task<Dictionary<PlatformRoute, List<(Player, long)>>> GetPlayersLastGameStartTimestampAsync()
     {
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
@@ -462,13 +463,43 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         {
             var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
             var summoner = CreateSummonerFromReader(reader);
+            var lastGameStartTimestamp = reader.GetInt64("LastGameStartTimestamp");
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+
+            if (!players.TryGetValue(platform, out var value))
+            {
+                value = [];
+                players[platform] = value;
+            }
+
+            value.Add((new Player(summoner, champion), lastGameStartTimestamp));
+        }
+
+        return players;
+    }
+
+    public async Task<ConcurrentDictionary<PlatformRoute, ConcurrentBag<Player>>> GetPlayersAsync()
+    {
+        await using var connection = databaseConnection.GetConnection();
+        await connection.OpenAsync();
+
+        var query =
+            "SELECT * FROM Players P JOIN Summoners S on P.SummonerPuuid = S.Puuid";
+        await using var command = new MySqlCommand(query, connection);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!reader.HasRows) return [];
+
+        var players = new ConcurrentDictionary<PlatformRoute, ConcurrentBag<Player>>();
+
+        while (await reader.ReadAsync())
+        {
+            var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
+            var summoner = CreateSummonerFromReader(reader);
 
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
-            var lastGameStartTimestamp = reader.GetInt64("LastGameStartTimestamp");
 
-            if (!players.ContainsKey(platform)) players[platform] = [];
-
-            players[platform].Add((new Player(summoner, champion), lastGameStartTimestamp));
+            players[platform].Add(new Player(summoner, champion));
         }
 
         return players;
@@ -486,29 +517,6 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         List<(Summoner, PlatformRoute)> summoners = [];
         if (!reader.HasRows) return summoners;
-
-        while (await reader.ReadAsync())
-        {
-            var summoner = CreateSummonerFromReader(reader);
-            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
-
-            summoners.Add((summoner, platform));
-        }
-
-        return summoners;
-    }
-
-    public async Task<List<(Summoner, PlatformRoute)>> GetSummonerIdsOrderedByGamesPlayedAsync()
-    {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "SELECT * FROM SummonersOrderedByGamesPlayed";
-
-        await using var command = new MySqlCommand(query, connection);
-        await using var reader = await command.ExecuteReaderAsync();
-
-        var summoners = new List<(Summoner, PlatformRoute)>();
 
         while (await reader.ReadAsync())
         {
