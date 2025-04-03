@@ -94,11 +94,11 @@ public class FetchOtps(RiotGamesApi riotApi)
             DisplayTimeInRealTime = true
         });
 
-        var tasks = new List<Task>();
         var semaphore = new SemaphoreSlim(100);
 
-        foreach (var (platform, platformEntries) in entries)
+        var tasks = entries.Select(async kvp =>
         {
+            var (platform, platformEntries) = kvp;
             var countLeagueItem = 0;
 
             using var childPbar = pbar.Spawn(platformEntries.Count, "",
@@ -110,48 +110,56 @@ public class FetchOtps(RiotGamesApi riotApi)
 
             var stopwatch = new Stopwatch();
             stopwatch.Start();
-            foreach (var leagueItem in platformEntries)
+
+            var partitioner = Partitioner.Create(platformEntries, EnumerablePartitionerOptions.NoBuffering);
+            var partitionTasks = partitioner.GetPartitions(Environment.ProcessorCount).Select(partition => Task.Run(async () =>
             {
-                countLeagueItem++;
-
-                await semaphore.WaitAsync();
-                tasks.Add(Task.Run(async () =>
+                using (partition)
                 {
-                    try
+                    while (partition.MoveNext())
                     {
-                        var summoner = await riotApi.SummonerV4().GetBySummonerIdAsync(platform, leagueItem.SummonerId);
-                        var championMasteries = await riotApi.ChampionMasteryV4()
-                            .GetAllChampionMasteriesByPUUIDAsync(platform, summoner.Puuid);
-                        lock (ChampionMasteries)
-                        {
-                            ChampionMasteries.Add(summoner, championMasteries);
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // ignored
-                    }
-                    finally
-                    {
-                        semaphore.Release();
+                        var leagueItem = partition.Current;
+                        countLeagueItem++;
 
+                        await semaphore.WaitAsync();
                         try
                         {
-                            var estimatedTime = stopwatch.Elapsed.TotalSeconds / countLeagueItem *
-                                                platformEntries.Count;
-                            childPbar.Tick(message: $"{childPbar.CurrentTick + 1}/{childPbar.MaxTicks} summoners fetched",
-                                estimatedDuration: TimeSpan.FromSeconds(estimatedTime));
-
+                            var summoner = await riotApi.SummonerV4().GetBySummonerIdAsync(platform, leagueItem.SummonerId);
+                            var championMasteries = await riotApi.ChampionMasteryV4()
+                                .GetAllChampionMasteriesByPUUIDAsync(platform, summoner.Puuid);
+                            lock (ChampionMasteries)
+                            {
+                                ChampionMasteries.Add(summoner, championMasteries);
+                            }
                         }
                         catch (Exception)
                         {
-                            childPbar.Tick();
+                            // ignored
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+
+                            try
+                            {
+                                var estimatedTime = stopwatch.Elapsed.TotalSeconds / countLeagueItem *
+                                                    platformEntries.Count;
+                                childPbar.Tick(message: $"{childPbar.CurrentTick + 1}/{childPbar.MaxTicks} summoners fetched",
+                                    estimatedDuration: TimeSpan.FromSeconds(estimatedTime));
+
+                            }
+                            catch (Exception)
+                            {
+                                childPbar.Tick();
+                            }
                         }
                     }
-                }));
-            }
+                }
+            })).ToList();
+
+            await Task.WhenAll(partitionTasks);
             pbar.Tick($"Platform: {platform} {pbar.CurrentTick + 1}/{pbar.MaxTicks}");
-        }
+        }).ToList();
 
         await Task.WhenAll(tasks);
     }
