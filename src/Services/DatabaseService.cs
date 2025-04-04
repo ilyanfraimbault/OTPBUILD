@@ -228,34 +228,6 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return await command.ExecuteNonQueryAsync();
     }
 
-    public async Task InsertPlayersAsync(List<Player> players)
-    {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        using var transaction = await connection.BeginTransactionAsync();
-
-        try
-        {
-            foreach (var player in players)
-            {
-                var query = "CALL insertPlayer(@SummonerPuuid, @Champion)";
-                using var command = new MySqlCommand(query, connection, transaction);
-                command.Parameters.AddWithValue("@Puuid", player.Summoner.Puuid);
-                command.Parameters.AddWithValue("@Champion", (int)player.Champion);
-
-                await command.ExecuteNonQueryAsync();
-            }
-
-            await transaction.CommitAsync();
-        }
-        catch (Exception)
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
-    }
-
     private Task<GameParticipant> ReadParticipantFromReaderAsync(DbDataReader reader)
     {
         var perkStats = new PerkStats
@@ -471,6 +443,24 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         var summoner = CreateSummonerFromReader(reader);
 
         return new Player(summoner, champion);
+    }
+
+    public async Task<Summoner?> GetSummonerAsync(string summonerPuuid)
+    {
+        await using var connection = databaseConnection.GetConnection();
+
+        connection.Open();
+
+        var query = "SELECT * FROM Summoners WHERE Puuid = @Puuid";
+        await using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Puuid", summonerPuuid);
+        await using var reader = command.ExecuteReader();
+
+        if (!reader.HasRows) return null;
+
+        await reader.ReadAsync();
+
+        return CreateSummonerFromReader(reader);
     }
 
     public async Task<Dictionary<PlatformRoute, List<(Player, long)>>> GetPlayersLastGameStartTimestampAsync()
