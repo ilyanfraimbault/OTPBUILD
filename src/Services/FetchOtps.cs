@@ -87,7 +87,9 @@ public class FetchOtps(RiotGamesApi riotApi)
             pbarPlatform.Tick($"Platform: {platform} {pbarPlatform.CurrentTick + 1}/{pbarPlatform.MaxTicks}");
         }
 
-        using var pbar = new ProgressBar(entries.Count, "", new ProgressBarOptions
+        var count = entries.Sum(kvp => kvp.Value.Count);
+
+        using var pbar = new ProgressBar(count, "", new ProgressBarOptions
         {
             ProgressCharacter = '─',
             ForegroundColor = ConsoleColor.Blue,
@@ -144,13 +146,16 @@ public class FetchOtps(RiotGamesApi riotApi)
                             {
                                 var estimatedTime = stopwatch.Elapsed.TotalSeconds / countLeagueItem *
                                                     platformEntries.Count;
-                                childPbar.Tick(message: $"{childPbar.CurrentTick + 1}/{childPbar.MaxTicks} summoners fetched",
+                                childPbar.Tick(message: $"{platform} : {childPbar.CurrentTick + 1}/{childPbar.MaxTicks} summoners fetched",
                                     estimatedDuration: TimeSpan.FromSeconds(estimatedTime));
+                                pbar.Tick();
 
                             }
-                            catch (Exception)
+                            catch (Exception e)
                             {
+                                childPbar.WriteErrorLine(e.Message);
                                 childPbar.Tick();
+                                pbar.Tick();
                             }
                         }
                     }
