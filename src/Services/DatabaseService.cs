@@ -463,25 +463,26 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return CreateSummonerFromReader(reader);
     }
 
-    public async Task<Dictionary<PlatformRoute, List<(Player, long)>>> GetPlayersLastGameStartTimestampAsync()
+    public async Task<Dictionary<PlatformRoute, List<(string, long)>>> GetPlayerPuuidsLastGameStartTimestampAsync()
     {
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
         var query =
-            "SELECT * FROM LastGameStartTimestampByPlayers LGSTP JOIN Summoners S ON LGSTP.SummonerPuuid = S.Puuid";
+            "SELECT * FROM lastgamestarttimestampbyplayerPuuids LGSTP";
         await using var command = new MySqlCommand(query, connection);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return [];
 
-        var players = new Dictionary<PlatformRoute, List<(Player, long)>>();
+        var players = new Dictionary<PlatformRoute, List<(string, long)>>();
 
         while (await reader.ReadAsync())
         {
-            var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
-            var summoner = CreateSummonerFromReader(reader);
-            var lastGameStartTimestamp = reader.GetInt64("LastGameStartTimestamp");
+            var puuid = reader.GetString("SummonerPuuid");
+            var lastGameStartTimestamp = reader.IsDBNull(reader.GetOrdinal("LastGameStartTimestamp"))
+                ? 0
+                : reader.GetInt64("LastGameStartTimestamp");
             var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
 
             if (!players.TryGetValue(platform, out var value))
@@ -490,7 +491,39 @@ public class DatabaseService(DatabaseConnection databaseConnection)
                 players[platform] = value;
             }
 
-            value.Add((new Player(summoner, champion), lastGameStartTimestamp));
+            value.Add((puuid, lastGameStartTimestamp));
+        }
+
+        return players;
+    }
+
+    public async Task<Dictionary<PlatformRoute, List<(string, long)>>> GetPlayerPuuidsWithoutGamesAsync()
+    {
+        await using var connection = databaseConnection.GetConnection();
+        await connection.OpenAsync();
+
+        var query =
+            "SELECT * FROM playerswithoutgames";
+
+        await using var command = new MySqlCommand(query, connection);
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        if (!reader.HasRows) return [];
+
+        var players = new Dictionary<PlatformRoute, List<(string, long)>>();
+
+        while (await reader.ReadAsync())
+        {
+            var puuid = reader.GetString("Puuid");
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+
+            if (!players.TryGetValue(platform, out var value))
+            {
+                value = [];
+                players[platform] = value;
+            }
+            value.Add((puuid, 0));
         }
 
         return players;
