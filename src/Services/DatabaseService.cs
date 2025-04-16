@@ -463,7 +463,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return CreateSummonerFromReader(reader);
     }
 
-    public async Task<Dictionary<PlatformRoute, List<(string, long)>>> GetPlayerPuuidsLastGameStartTimestampAsync()
+    public async Task<IDictionary<PlatformRoute, IList<(string, long)>>> GetPlayerPuuidsLastGameStartTimestampAsync()
     {
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
@@ -473,9 +473,9 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         await using var command = new MySqlCommand(query, connection);
 
         await using var reader = await command.ExecuteReaderAsync();
-        if (!reader.HasRows) return [];
+        if (!reader.HasRows) return new Dictionary<PlatformRoute, IList<(string, long)>>();
 
-        var players = new Dictionary<PlatformRoute, List<(string, long)>>();
+        var players = new Dictionary<PlatformRoute, IList<(string, long)>>();
 
         while (await reader.ReadAsync())
         {
