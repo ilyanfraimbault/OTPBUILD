@@ -26,6 +26,12 @@ Although currently backend-only, OTPBUILD lays the foundation for a future web i
 
 ---
 
+## 🗺️ Database Schema
+
+<img alt="Database Schema" height="640" src="assets/images/schema.png" width="665"/>
+
+------
+
 ## 📁 Project Structure
 
 ```
@@ -60,7 +66,7 @@ Example rate usage:
 
 ## 💡 Project Vision
 
-In the near future, OTPBUILD will evolve into a full-stack web platform where:
+Soon OTPBUILD will evolve into a full-stack web platform where:
 - Players can search by champion and role
 - Builds from real high-elo OTPs are displayed
 - Trends over time can be visualized
