@@ -28,8 +28,7 @@ Although currently backend-only, OTPBUILD lays the foundation for a future web i
 
 ## 🗺️ Database Schema
 
-<img alt="Database Schema" height="640" src="assets/images/schema.png" width="665"/>
-
+<img alt="Database Schema" height="428" src="assets/images/schema.png" width="814"/>
 ------
 
 ## 📁 Project Structure
