@@ -27,7 +27,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         command.Parameters.AddWithValue("@GameStartTimestamp", game.GameStartTimestamp);
         command.Parameters.AddWithValue("@GameVersion", game.GameVersion);
         command.Parameters.AddWithValue("@GameType", game.GameType);
-        command.Parameters.AddWithValue("@PlatformId", game.PlatformRoute);
+        command.Parameters.AddWithValue("@PlatformId", game.PlatformRoute.ToString());
         command.Parameters.AddWithValue("@Winner", game.Winner);
         command.Parameters.AddWithValue("@MatchId", game.MatchId);
         var result = await command.ExecuteNonQueryAsync();
@@ -107,7 +107,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         participantCommand.Parameters.AddWithValue("@SummonerSpell2", participant.SummonerSpells.Item2);
         participantCommand.Parameters.AddWithValue("@Perks", perksId);
         participantCommand.Parameters.AddWithValue("@TeamPosition", participant.TeamPosition);
-        participantCommand.Parameters.AddWithValue("@PlatformId", game.PlatformRoute);
+        participantCommand.Parameters.AddWithValue("@PlatformId", game.PlatformRoute.ToString());
 
         return await participantCommand.ExecuteNonQueryAsync();
     }
