@@ -64,6 +64,52 @@ create index Perks
 create index SummonerPuuid
     on Participants (SummonerPuuid);
 
+create trigger after_participants_delete
+    after delete
+    on Participants
+    for each row
+BEGIN
+    UPDATE SummonnerChampionStats
+    SET GamesPlayed = GamesPlayed - 1
+    WHERE SummonerPuuid = OLD.SummonerPuuid
+      AND Champion = OLD.Champion;
+
+    DELETE
+    FROM SummonnerChampionStats
+    WHERE GamesPlayed = 0;
+END;
+
+create trigger after_participants_insert
+    after insert
+    on Participants
+    for each row
+BEGIN
+    INSERT INTO SummonnerChampionStats (SummonerPuuid, Champion, GamesPlayed)
+    VALUES (NEW.SummonerPuuid, NEW.Champion, 1)
+    ON DUPLICATE KEY UPDATE GamesPlayed = GamesPlayed + 1;
+END;
+
+create trigger after_participants_update
+    after update
+    on Participants
+    for each row
+BEGIN
+    IF (OLD.SummonerPuuid != NEW.SummonerPuuid OR OLD.Champion != NEW.Champion) THEN
+        UPDATE SummonnerChampionStats
+        SET GamesPlayed = GamesPlayed - 1
+        WHERE SummonerPuuid = OLD.SummonerPuuid
+          AND Champion = OLD.Champion;
+
+        DELETE
+        FROM SummonnerChampionStats
+        WHERE GamesPlayed = 0;
+
+        INSERT INTO SummonnerChampionStats (SummonerPuuid, Champion, GamesPlayed)
+        VALUES (NEW.SummonerPuuid, NEW.Champion, 1)
+        ON DUPLICATE KEY UPDATE GamesPlayed = GamesPlayed + 1;
+    END IF;
+END;
+
 create table Perks
 (
     id             int auto_increment
@@ -179,6 +225,14 @@ create table Summoners
     PlatformId    varchar(10) not null
 );
 
+create table SummonnerChampionStats
+(
+    SummonerPuuid varchar(255) not null,
+    Champion      varchar(255) not null,
+    GamesPlayed   int          null,
+    primary key (SummonerPuuid, Champion)
+);
+
 create table event_logs
 (
     id         int auto_increment
@@ -197,24 +251,16 @@ group by P.Champion
 order by count(0);
 
 create view findnewplayers as
-select gpcs.SummonerPuuid                             AS SummonerPuuid,
-       gpcs.Champion                                  AS Champion,
-       gpcs.GamesPlayed                               AS GamesPlayed,
-       tgp.TotalGamesPlayed                           AS TOTAL,
-       avg((gpcs.GamesPlayed / tgp.TotalGamesPlayed)) AS PlayRate
-from (gamesplayedbychampionsummoner GPCS join totalgamesplayedbysummoner TGP
-      on ((tgp.SummonerPuuid = gpcs.SummonerPuuid)))
+select scp.SummonerPuuid    AS SummonerPuuid,
+       scp.Champion         AS Champion,
+       scp.GamesPlayed      AS GamesPlayed,
+       scp.TotalGamesPlayed AS TotalGamesPlayed,
+       scp.PlayRate         AS PlayRate
+from summonerchampionplayrates SCP
 where exists(select 1
              from players P
-             where ((P.SummonerPuuid = gpcs.SummonerPuuid) and (P.Champion = gpcs.Champion))) is false
-group by gpcs.Champion, gpcs.GamesPlayed, gpcs.SummonerPuuid
-order by (gpcs.GamesPlayed * PlayRate) desc;
-
-create view gamesplayedbychampionsummoner as
-select P.SummonerPuuid AS SummonerPuuid, P.Champion AS Champion, count(0) AS GamesPlayed
-from participants P
-group by P.SummonerPuuid, P.Champion
-order by count(0) desc;
+             where ((P.SummonerPuuid = scp.SummonerPuuid) and (P.Champion = scp.Champion))) is false
+order by (scp.PlayRate * scp.GamesPlayed) desc;
 
 create view gamesplayedbyplatformid as
 select G.PlatformId AS PlatformId, count(0) AS GamesPlayed
@@ -320,16 +366,14 @@ from ((summoners S left join participants P on ((S.Puuid = P.SummonerPuuid))) le
 group by S.Puuid;
 
 create view playersstats as
-select gpcs.SummonerPuuid                                          AS SummonerPuuid,
-       gpcs.Champion                                               AS Champion,
-       gpcs.GamesPlayed                                            AS GamesPlayed,
-       totalgamesplayed.TotalGamesPlayed                           AS TOTAL,
-       avg((gpcs.GamesPlayed / totalgamesplayed.TotalGamesPlayed)) AS PlayRate
-from ((gamesplayedbychampionsummoner GPCS join totalgamesplayedbysummoners TotalGamesPlayed
-       on ((totalgamesplayed.SummonerPuuid = gpcs.SummonerPuuid))) join players P
-      on (((P.SummonerPuuid = gpcs.SummonerPuuid) and (P.Champion = gpcs.Champion))))
-group by gpcs.Champion, gpcs.GamesPlayed, gpcs.SummonerPuuid
-order by (gpcs.GamesPlayed * PlayRate);
+select SCS.SummonerPuuid                               AS SummonerPuuid,
+       SCS.Champion                                    AS Champion,
+       SCS.GamesPlayed                                 AS GamesPlayed,
+       totalgamesplayed.TotalGames                     AS TotalGamesPlayed,
+       (SCS.GamesPlayed / totalgamesplayed.TotalGames) AS PlayRate
+from (summonnerchampionstats SCS join totalgamesplayedbysummoner TotalGamesPlayed
+      on ((SCS.SummonerPuuid = totalgamesplayed.SummonerPuuid)))
+where SCS.SummonerPuuid in (select players.SummonerPuuid from players);
 
 create view playerswithoutgames as
 select distinct S.Id            AS Id,
@@ -351,29 +395,18 @@ select (blue.blueSide / (blue.blueSide + red.redSide)) AS blueWinRate,
 from ((select count(0) AS blueSide from games where (games.Winner = '100')) blue join (select count(0) AS redSide from games where (games.Winner = '200')) red);
 
 create view summonerchampionplayrates as
-select P.SummonerPuuid                                                                                     AS SummonerPuuid,
-       P.Champion                                                                                          AS Champion,
-       (g.GamesPlayed / (select count(0) from participants P2 where (P2.SummonerPuuid = P.SummonerPuuid))) AS PlayRate
-from (players P join gamesplayedbychampionsummoner G
-      on (((P.Champion = g.Champion) and (P.SummonerPuuid = g.SummonerPuuid))));
+select SCS.SummonerPuuid                               AS SummonerPuuid,
+       SCS.Champion                                    AS Champion,
+       SCS.GamesPlayed                                 AS GamesPlayed,
+       totalgamesplayed.TotalGames                     AS TotalGamesPlayed,
+       (SCS.GamesPlayed / totalgamesplayed.TotalGames) AS PlayRate
+from (summonnerchampionstats SCS join totalgamesplayedbysummoner TotalGamesPlayed
+      on ((SCS.SummonerPuuid = totalgamesplayed.SummonerPuuid)));
 
 create view summonersbyplatformid as
 select S.PlatformId AS PlatformId, count(0) AS Count
 from summoners S
 group by S.PlatformId;
-
-create view summonersorderedbygamesplayed as
-select S.Id            AS Id,
-       S.Puuid         AS Puuid,
-       S.Name          AS Name,
-       S.AccountId     AS AccountId,
-       S.ProfileIconId AS ProfileIconId,
-       S.RevisionDate  AS RevisionDate,
-       S.Level         AS Level,
-       S.PlatformId    AS PlatformId
-from (summoners S left join participants P on ((P.SummonerPuuid = S.Puuid)))
-group by S.Puuid
-order by count(P.GameId);
 
 create view summonerstatsbychampion as
 select P.SummonerPuuid AS SummonerPuuid,
@@ -386,15 +419,9 @@ from participants P
 group by P.SummonerPuuid, P.Champion;
 
 create view totalgamesplayedbysummoner as
-select P.SummonerPuuid AS SummonerPuuid, count(0) AS TotalGamesPlayed
-from participants P
-group by P.SummonerPuuid
-order by TotalGamesPlayed desc;
-
-create view totalgamesplayedbysummoners as
-select P.SummonerPuuid AS SummonerPuuid, count(0) AS TotalGamesPlayed
-from participants P
-group by P.SummonerPuuid;
+select SCS.SummonerPuuid AS SummonerPuuid, sum(SCS.GamesPlayed) AS TotalGames
+from summonnerchampionstats SCS
+group by SCS.SummonerPuuid;
 
 create procedure EventInsertNewPlayers()
 BEGIN
@@ -403,7 +430,7 @@ BEGIN
     INSERT INTO players (SummonerPuuid, Champion)
     SELECT SummonerPuuid, Champion
     FROM findnewplayers
-    WHERE GamesPlayed >= 50
+    WHERE TotalGamesPlayed >= 50
       AND playrate > 0.6;
 
     SET rows_inserted = ROW_COUNT();
@@ -419,8 +446,8 @@ BEGIN
     DELETE
     FROM players
     WHERE (SummonerPuuid, Champion) IN (SELECT SummonerPuuid, Champion
-                                        FROM playersstats
-                                        WHERE TOTAL > 35
+                                        FROM summonerchampionplayrates
+                                        WHERE TotalGamesPlayed > 35
                                           AND PlayRate < 0.15);
 
     SET rows_deleted = ROW_COUNT();
