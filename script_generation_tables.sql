@@ -1,14 +1,3 @@
-create table Accounts
-(
-    Puuid    varchar(78) not null
-        primary key,
-    GameName varchar(50) null,
-    TagLine  varchar(50) null,
-    constraint accounts_ibfk_1
-        foreign key (Puuid) references Summoners (Puuid)
-            on update cascade on delete cascade
-);
-
 create table Games
 (
     GameDuration       int         not null,
@@ -117,9 +106,7 @@ create table Perks
     statPerks      int not null,
     primaryStyle   int not null,
     secondaryStyle int not null,
-    constraint Perks_statPerks_primaryStyle_secondaryStyle_uindex
-        unique (statPerks, primaryStyle, secondaryStyle),
-    constraint statPerks_2
+    constraint idx_statPerks_unq
         unique (statPerks, primaryStyle, secondaryStyle),
     constraint Perks_ibfk_1
         foreign key (statPerks) references StatPerks (id)
@@ -151,20 +138,8 @@ create table PerksStyle
     styleSelection2 int         not null,
     styleSelection3 int         null,
     styleSelection4 int         null,
-    constraint description
-        unique (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4),
-    constraint PerksStyle_ibfk_1
-        foreign key (styleSelection1) references StyleSelection (id)
-            on update cascade on delete cascade,
-    constraint PerksStyle_ibfk_2
-        foreign key (styleSelection2) references StyleSelection (id)
-            on update cascade on delete cascade,
-    constraint PerksStyle_ibfk_3
-        foreign key (styleSelection3) references StyleSelection (id)
-            on update cascade on delete cascade,
-    constraint PerksStyle_ibfk_4
-        foreign key (styleSelection4) references StyleSelection (id)
-            on update cascade on delete cascade
+    constraint idx_perkstyle_unique
+        unique (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4)
 );
 
 create index styleSelection1
@@ -200,18 +175,6 @@ create table StatPerks
         unique (defense, flex, offense)
 );
 
-create table StyleSelection
-(
-    id   int auto_increment
-        primary key,
-    perk int not null,
-    var1 int not null,
-    var2 int not null,
-    var3 int not null,
-    constraint perk
-        unique (perk, var1, var2, var3)
-);
-
 create table Summoners
 (
     Id            varchar(63) not null,
@@ -222,7 +185,9 @@ create table Summoners
     ProfileIconId int         null,
     RevisionDate  bigint      null,
     Level         bigint      null,
-    PlatformId    varchar(10) not null
+    PlatformId    varchar(10) not null,
+    GameName      varchar(50) null,
+    TagLine       varchar(5)  null
 );
 
 create table SummonnerChampionStats
@@ -280,8 +245,8 @@ select G.GameDuration                 AS GameDuration,
        S.Id                           AS SummonerId,
        S.Name                         AS SummonerName,
        S.Level                        AS SummonerLevel,
-       A.GameName                     AS GameName,
-       A.TagLine                      AS TagLine,
+       S.GameName                     AS GameName,
+       S.TagLine                      AS TagLine,
        P.Champion                     AS Champion,
        P.TeamId                       AS TeamId,
        P.Kills                        AS Kills,
@@ -313,43 +278,11 @@ select G.GameDuration                 AS GameDuration,
        secondaryStyle.description     AS secondaryStyleDescription,
        secondaryStyle.style           AS secondaryStyle,
        secondaryStyle.styleSelection1 AS secStyleSelection1,
-       secondaryStyle.styleSelection2 AS secStyleSelection2,
-       primStyleSelection1.perk       AS primStyleSelection1Perk,
-       primStyleSelection1.var1       AS primStyleSelection1Var1,
-       primStyleSelection1.var2       AS primStyleSelection1Var2,
-       primStyleSelection1.var3       AS primStyleSelection1Var3,
-       primStyleSelection2.perk       AS primStyleSelection2Perk,
-       primStyleSelection2.var1       AS primStyleSelection2Var1,
-       primStyleSelection2.var2       AS primStyleSelection2Var2,
-       primStyleSelection2.var3       AS primStyleSelection2Var3,
-       primStyleSelection3.perk       AS primStyleSelection3Perk,
-       primStyleSelection3.var1       AS primStyleSelection3Var1,
-       primStyleSelection3.var2       AS primStyleSelection3Var2,
-       primStyleSelection3.var3       AS primStyleSelection3Var3,
-       primStyleSelection4.perk       AS primStyleSelection4Perk,
-       primStyleSelection4.var1       AS primStyleSelection4Var1,
-       primStyleSelection4.var2       AS primStyleSelection4Var2,
-       primStyleSelection4.var3       AS primStyleSelection4Var3,
-       secStyleSelection1.perk        AS secStyleSelection1Perk,
-       secStyleSelection1.var1        AS secStyleSelection1Var1,
-       secStyleSelection1.var2        AS secStyleSelection1Var2,
-       secStyleSelection1.var3        AS secStyleSelection1Var3,
-       secStyleSelection2.perk        AS secStyleSelection2Perk,
-       secStyleSelection2.var1        AS secStyleSelection2Var1,
-       secStyleSelection2.var2        AS secStyleSelection2Var2,
-       secStyleSelection2.var3        AS secStyleSelection2Var3
-from (((((((((((((games G join participants P on ((G.GameId = P.GameId))) join summoners S
-                 on ((P.SummonerPuuid = S.Puuid))) join accounts A on ((S.Puuid = A.Puuid))) join perks P2
-               on ((P2.id = P.Perks))) join perksstyle primaryStyle
-              on ((primaryStyle.id = P2.primaryStyle))) join perksstyle secondaryStyle
-             on ((secondaryStyle.id = P2.secondaryStyle))) join styleselection primStyleSelection1
-            on ((primStyleSelection1.id = primaryStyle.styleSelection1))) join styleselection primStyleSelection2
-           on ((primStyleSelection2.id = primaryStyle.styleSelection2))) join styleselection primStyleSelection3
-          on ((primStyleSelection3.id = primaryStyle.styleSelection3))) join styleselection primStyleSelection4
-         on ((primStyleSelection4.id = primaryStyle.styleSelection4))) join styleselection secStyleSelection1
-        on ((secStyleSelection1.id = secondaryStyle.styleSelection1))) join styleselection secStyleSelection2
-       on ((secStyleSelection2.id = secondaryStyle.styleSelection2))) join statperks
-      on ((statperks.id = P2.statPerks)));
+       secondaryStyle.styleSelection2 AS secStyleSelection2
+from ((((((games G join participants P on ((G.GameId = P.GameId))) join summoners S
+          on ((P.SummonerPuuid = S.Puuid))) join perks P2 on ((P2.id = P.Perks))) join perksstyle primaryStyle
+        on ((primaryStyle.id = P2.primaryStyle))) join perksstyle secondaryStyle
+       on ((secondaryStyle.id = P2.secondaryStyle))) join statperks on ((statperks.id = P2.statPerks)));
 
 create view lastgamestarttimestampbyplayerpuuids as
 select distinct lst.SummonerPuuid          AS SummonerPuuid,
@@ -456,13 +389,6 @@ BEGIN
     VALUES (CONCAT('Deleted ', rows_deleted, ' inactive players.'));
 END;
 
-create procedure insertAccount(IN p_Puuid varchar(78), IN p_GameName varchar(50), IN p_TagLine varchar(50))
-BEGIN
-    INSERT INTO Accounts (Puuid, GameName, TagLine)
-    VALUES (p_Puuid, p_GameName, p_TagLine)
-    ON DUPLICATE KEY UPDATE GameName = p_GameName, TagLine = p_TagLine;
-END;
-
 create procedure insertGame(IN p_GameId bigint, IN p_GameDuration int, IN p_GameStartTimestamp bigint,
                             IN p_GameVersion varchar(50), IN p_GameType varchar(50), IN p_PlatformId varchar(10),
                             IN p_Winner int, IN p_MatchId varchar(50))
@@ -480,17 +406,16 @@ BEGIN
 END;
 
 create procedure insertParticipant(IN p_GameId bigint, IN p_SummonerPuuid varchar(78), IN p_SummonerId varchar(63),
-                                   IN p_SummonerLevel bigint, IN p_GameName varchar(50), IN p_TagLine varchar(50),
-                                   IN p_Champion int, IN p_TeamId int, IN p_Kills int, IN p_Deaths int,
-                                   IN p_Assists int, IN p_Item0 int, IN p_Item1 int, IN p_Item2 int, IN p_Item3 int,
-                                   IN p_Item4 int, IN p_Item5 int, IN p_Item6 int, IN p_SpellCast1 int,
+                                   IN p_SummonerLevel bigint, IN p_SummonerName varchar(50), IN p_GameName varchar(50),
+                                   IN p_TagLine varchar(50), IN p_Champion int, IN p_TeamId int, IN p_Kills int,
+                                   IN p_Deaths int, IN p_Assists int, IN p_Item0 int, IN p_Item1 int, IN p_Item2 int,
+                                   IN p_Item3 int, IN p_Item4 int, IN p_Item5 int, IN p_Item6 int, IN p_SpellCast1 int,
                                    IN p_SpellCast2 int, IN p_SpellCast3 int, IN p_SpellCast4 int,
                                    IN p_SummonerSpell1 int, IN p_SummonerSpell2 int, IN p_Perks int,
                                    IN p_TeamPosition varchar(10), IN p_PlatformId varchar(10))
 BEGIN
-    CALL insertSummoner(p_SummonerId, p_SummonerPuuid, p_GameName,
-                        NULL, NULL, NULL, p_SummonerLevel, p_PlatformId);
-    CALL insertAccount(p_SummonerPuuid, p_GameName, p_TagLine);
+    CALL insertSummoner(p_SummonerId, p_SummonerPuuid, p_SummonerName,
+                        NULL, NULL, NULL, p_SummonerLevel, p_PlatformId, p_GameName, p_TagLine);
 
     INSERT INTO Participants
     VALUES (p_GameId, p_SummonerPuuid, p_Champion, p_TeamId, p_Kills, p_Deaths, p_Assists,
@@ -561,36 +486,23 @@ BEGIN
     END IF;
 END;
 
-create procedure insertStyleSelection(IN p_Perk int, IN p_Var1 int, IN p_Var2 int, IN p_Var3 int, OUT p_Id int)
-BEGIN
-    SELECT id
-    INTO p_Id
-    FROM StyleSelection
-    WHERE perk = p_Perk
-      AND var1 = p_Var1
-      AND var2 = p_Var2
-      AND var3 = p_Var3;
-
-    IF p_Id IS NULL THEN
-        INSERT INTO StyleSelection (perk, var1, var2, var3)
-        VALUES (p_Perk, p_Var1, p_Var2, p_Var3)
-        ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id);
-        SET p_Id = LAST_INSERT_ID();
-    END IF;
-END;
-
 create procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78), IN p_Name varchar(50),
                                 IN p_AccountId varchar(56), IN p_ProfileIconId int, IN p_RevisionDate bigint,
-                                IN p_Level bigint, IN p_PlatformId varchar(50))
+                                IN p_Level bigint, IN p_PlatformId varchar(50), IN p_GameName varchar(50),
+                                IN p_TagLine varchar(5))
 BEGIN
-    INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlatformId)
-    VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlatformId)
+    INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlatformId, GameName,
+                           TagLine)
+    VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlatformId, p_GameName,
+            p_TagLine)
     ON DUPLICATE KEY UPDATE Name          = IFNULL(Name, p_Name),
                             AccountId     = IFNULL(AccountId, p_AccountId),
                             ProfileIconId = IFNULL(ProfileIconId, p_ProfileIconId),
                             RevisionDate  = IFNULL(RevisionDate, p_RevisionDate),
                             Level         = IFNULL(Level, p_Level),
-                            PlatformId    = IFNULL(PlatformId, p_PlatformId);
+                            PlatformId    = IFNULL(PlatformId, p_PlatformId),
+                            GameName      = IFNULL(GameName, p_GameName),
+                            TagLine       = IFNULL(TagLine, p_TagLine);
 END;
 
 create event insert_new_players on schedule
