@@ -8,113 +8,92 @@ using ShellProgressBar;
 
 namespace OTPBUILD.Services;
 
-public class GameFetcher(RiotGamesApi riotApi, DatabaseService databaseService, ProgressBarBase progressBar)
+public class GameFetcher(
+    RiotGamesApi riotApi,
+    DatabaseService databaseService,
+    ProgressBarBase progressBar,
+    IDictionary<PlatformRoute, IList<(string, long)>> players,
+    ConcurrentDictionary<PlatformRoute, ConcurrentBag<string>> matchIdsAlreadyInserted)
 {
-    private ConcurrentDictionary<PlatformRoute, ConcurrentBag<string>> _matchIdsAlreadyInserted = new();
-    private readonly ConcurrentDictionary<PlatformRoute, ConcurrentBag<(string, long)>> _retryList = new();
-
     private readonly ProgressBarOptions _progressBarOptions = new()
     {
         ProgressCharacter = '─',
-        ForegroundColor = ConsoleColor.DarkYellow,
-        DisplayTimeInRealTime = false
+        ForegroundColor = ConsoleColor.Magenta,
+        DisplayTimeInRealTime = false,
+        ProgressBarOnBottom = true,
+        CollapseWhenFinished = true
     };
 
-    public async Task RunAsync(IDictionary<PlatformRoute, IList<(string, long)>> players)
-    {
-        _matchIdsAlreadyInserted = await databaseService.GetMatchIdsAsync();
+    public readonly ProgressBarBase ProgressBar = progressBar;
 
-        var tasks = new List<Task<List<Game>>>();
+    public async Task RunAsync()
+    {
+        ConcurrentBag<Task<List<Game>>> tasks;
 
         var totalPlayers = players.Sum(p => p.Value.Count);
 
-        using (var fetchPbar = progressBar.Spawn(totalPlayers, "Fetching players", _progressBarOptions))
+        using (var fetchPbar = ProgressBar.Spawn(totalPlayers, "Fetching players", _progressBarOptions))
         {
-            await FetchGamesForPlayers(players, tasks, fetchPbar);
+            tasks = FetchGamesForPlayers(players, fetchPbar);
         }
 
         var remainingTasks = new HashSet<Task<List<Game>>>(tasks);
 
-        progressBar.Message = "Waiting for tasks to complete";
-        using (var taskPbar = progressBar.Spawn(remainingTasks.Count, "Completing tasks", _progressBarOptions))
+        ProgressBar.Message = "Waiting for tasks to complete";
+        using (var taskPbar = ProgressBar.Spawn(remainingTasks.Count, "Completing tasks", _progressBarOptions))
         {
             await CompleteTasks(remainingTasks, taskPbar);
         }
-
-        var retryTasks = new List<Task<List<Game>>>();
-
-        progressBar.Message = "Retrying failed tasks";
-        foreach (var (platformRoute, playerList) in _retryList)
-        {
-            using var retryPbar = progressBar.Spawn(playerList.Count, "Retrying failed tasks", _progressBarOptions);
-            foreach (var (puuid, lastGameStartTimestamp) in playerList)
-            {
-                retryPbar.WriteLine($"Retrying {puuid} and {platformRoute} since {lastGameStartTimestamp}");
-                retryTasks.Add(FetchGames(puuid, platformRoute, lastGameStartTimestamp, retryPbar));
-            }
-        }
-
-        remainingTasks.UnionWith(retryTasks);
-
-        var gamesList = await Task.WhenAll(tasks);
-
-        progressBar.Message = "Inserting games";
-        await InsertGames(gamesList.SelectMany(g => g).ToList(),
-            progressBar.Spawn(gamesList.SelectMany(g => g).Count(), "Inserting games", _progressBarOptions));
     }
 
-    private Task FetchGamesForPlayers(
-        IDictionary<PlatformRoute, IList<(string, long)>> players, List<Task<List<Game>>> tasks, ProgressBarBase pbar
+    private ConcurrentBag<Task<List<Game>>> FetchGamesForPlayers(
+        IDictionary<PlatformRoute, IList<(string, long)>> playerData, ProgressBarBase pbar
         )
     {
-        var stopwatch = Stopwatch.StartNew();
-        Parallel.ForEach(players, kvp =>
+        ConcurrentBag<Task<List<Game>>> tasksBag = [];
+        Parallel.ForEach(playerData, kvp =>
         {
             var platformRoute = kvp.Key;
             var playerList = kvp.Value;
             foreach (var (puuid, lastGameStartTimestamp) in playerList)
             {
-                if (pbar.Percentage > 0)
-                    pbar.EstimatedDuration =
-                        TimeSpan.FromSeconds(stopwatch.Elapsed.TotalSeconds / (pbar.Percentage / 100));
-
-                tasks.Add(FetchGames(puuid, platformRoute, lastGameStartTimestamp / 1000, pbar));
-                pbar.Tick(
-                    message: $"{pbar.CurrentTick + 1}/{pbar.MaxTicks} players fetched",
-                    estimatedDuration: pbar.EstimatedDuration);
+                tasksBag.Add(FetchGames(puuid, platformRoute, lastGameStartTimestamp / 1000));
+                pbar.Tick(message: $"{pbar.CurrentTick + 1}/{pbar.MaxTicks} players fetched");
             }
         });
 
-        return Task.CompletedTask;
+        return tasksBag;
     }
 
     private async Task CompleteTasks(HashSet<Task<List<Game>>> remainingTasks, ProgressBarBase taskPbar)
     {
-        var stopwatch = Stopwatch.StartNew();
+        var progressBarOptions = new ProgressBarOptions
+        {
+            ProgressCharacter = '─',
+            ForegroundColor = ConsoleColor.Green,
+            DisplayTimeInRealTime = true,
+            CollapseWhenFinished = true,
+            ProgressBarOnBottom = true
+        };
         while (remainingTasks.Count > 0)
         {
             var finishedTask = await Task.WhenAny(remainingTasks);
             var resultCount = finishedTask.Result.Count;
             if (resultCount != 0)
                 await InsertGames(finishedTask.Result,
-                    taskPbar.Spawn(resultCount, $"{resultCount} games to insert", options: _progressBarOptions));
+                    taskPbar.Spawn(resultCount, $"{resultCount} games to insert", options: progressBarOptions));
 
             remainingTasks.Remove(finishedTask);
 
             taskPbar.WriteLine($"{resultCount} game tasks completed");
 
-            if (taskPbar.Percentage > 0)
-                taskPbar.EstimatedDuration =
-                    TimeSpan.FromSeconds(stopwatch.Elapsed.TotalSeconds / (taskPbar.Percentage / 100));
-            taskPbar.Tick(
-                message: $"Progress: {taskPbar.CurrentTick}/{taskPbar.MaxTicks} games tasks completed",
-                estimatedDuration: taskPbar.EstimatedDuration);
-            progressBar.Tick();
+            ProgressBar.Tick();
+            taskPbar.Tick(message: $"Progress: {taskPbar.CurrentTick + 1}/{taskPbar.MaxTicks} games tasks completed");
         }
     }
 
     private async Task<List<Game>> FetchGames(
-        string puuid, PlatformRoute route, long lastPlayedTimestamp, ProgressBarBase pbar
+        string puuid, PlatformRoute route, long lastPlayedTimestamp
         )
     {
         string[] matchIds;
@@ -124,59 +103,54 @@ public class GameFetcher(RiotGamesApi riotApi, DatabaseService databaseService, 
             matchIds = await riotApi.MatchV5().GetMatchIdsByPUUIDAsync(route.ToRegional(), puuid,
                 startTime: lastPlayedTimestamp, queue: Queue.SUMMONERS_RIFT_5V5_RANKED_SOLO);
 
-            pbar.WriteLine($"{matchIds.Length} matches found for {puuid} and {route} since {lastPlayedTimestamp}");
+            ProgressBar.WriteLine(
+                $"{matchIds.Length} matches found for {puuid} and {route} since {lastPlayedTimestamp}");
         }
         catch (Exception)
         {
-            _retryList.AddOrUpdate(route,
-                _ => [(puuid, lastPlayedTimestamp)],
-                (_, bag) =>
-                {
-                    bag.Add((puuid, lastPlayedTimestamp));
-                    return bag;
-                });
-
-            pbar.WriteErrorLine($"Error for {puuid} and {route} since {lastPlayedTimestamp}");
+            ProgressBar.WriteErrorLine($"Error for {puuid} and {route} since {lastPlayedTimestamp}");
             return [];
         }
 
-        return await ConvertGames(route, pbar, matchIds);
+        return await ConvertGames(route, matchIds);
     }
 
-    private async Task<List<Game>> ConvertGames(PlatformRoute route, ProgressBarBase pbar, string[] matchIds)
+    private async Task<List<Game>> ConvertGames(PlatformRoute route, string[] matchIds)
     {
-        var matchTasks = AddMatchTaskIfNotExists(route, pbar, matchIds);
+        var matchTasks = AddMatchTaskIfNotExists(route, matchIds);
 
-        pbar.WriteLine($"{matchTasks.Count} match tasks to process");
+        ProgressBar.WriteLine($"{matchTasks.Count} match tasks to process");
 
-        return await ProcessGameConversion(pbar, matchTasks);
+        return await ProcessGameConversion(matchTasks);
     }
 
-    private List<Task<Match>> AddMatchTaskIfNotExists(PlatformRoute route, ProgressBarBase pbar, string[] matchIds)
+    private List<Task<Match>> AddMatchTaskIfNotExists(PlatformRoute route, string[] matchIds)
     {
         List<Task<Match>> matchTasks = [];
         foreach (var matchId in matchIds)
             try
             {
-                if (!_matchIdsAlreadyInserted.ContainsKey(route))
-                    _matchIdsAlreadyInserted.TryAdd(route, []);
+               if (!matchIdsAlreadyInserted.ContainsKey(route))
+                   matchIdsAlreadyInserted.TryAdd(route, []);
 
-                if (_matchIdsAlreadyInserted[route].Contains(matchId)) continue;
+               if (matchIdsAlreadyInserted[route].Contains(matchId)) continue;
+
+               matchIdsAlreadyInserted[route].Add(matchId);
 
                 var matchTask = riotApi.MatchV5().GetMatchAsync(route.ToRegional(), matchId);
-                _matchIdsAlreadyInserted[route].Add(matchId);
+                matchIdsAlreadyInserted[route].Add(matchId);
 
                 matchTasks.Add(matchTask!);
             }
             catch (Exception e)
             {
-                pbar.WriteErrorLine(e.ToString());
+                ProgressBar.WriteErrorLine(e.ToString());
             }
 
         return matchTasks;
     }
 
-    private async Task<List<Game>> ProcessGameConversion(ProgressBarBase pbar, List<Task<Match>> matchTasks)
+    private async Task<List<Game>> ProcessGameConversion(List<Task<Match>> matchTasks)
     {
         List<Game> gamesConverted = [];
         while (matchTasks.Count != 0)
@@ -191,7 +165,7 @@ public class GameFetcher(RiotGamesApi riotApi, DatabaseService databaseService, 
             }
             catch (Exception e)
             {
-                pbar.WriteErrorLine(e.ToString());
+                ProgressBar.WriteErrorLine(e.ToString());
             }
         }
 
@@ -206,7 +180,8 @@ public class GameFetcher(RiotGamesApi riotApi, DatabaseService databaseService, 
             if (pbar.Percentage > 0)
                 pbar.EstimatedDuration =
                     TimeSpan.FromSeconds(stopwatch.Elapsed.TotalSeconds / (pbar.Percentage / 100));
-            await databaseService.InsertGameAsync(game);
+            var result = await databaseService.InsertGameAsync(game);
+            ProgressBar.WriteLine((result > 0 ? "Inserted" : "Failed to insert") + $" game {game.GameId}");
             pbar.Tick(
                 message: $"{pbar.CurrentTick + 1}/{pbar.MaxTicks} games inserted",
                 estimatedDuration: pbar.EstimatedDuration);
