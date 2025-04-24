@@ -56,7 +56,7 @@ public class GameParticipant
     public GameParticipant(
         string summonerName, string summonerId, long summonerLevel, string puuid, Champion champion, Team teamId,
         string teamPosition, int kills, int deaths, int assists, List<int> items, List<int> spellsCasts,
-        (int, int) summonerSpells, Perks perks, string? riotIdGameName, string riotIdTagline
+        (int, int) summonerSpells, Perks perks, string riotIdGameName, string riotIdTagline
         )
     {
         SummonerName = summonerName;
