@@ -11,3 +11,4 @@ riderModule.iml
 /OTPBUILD.sln.DotSettings.user
 /Folder.DotSettings.user
 /.env
+/src/Services/RiotApiClient.cs

@@ -33,11 +33,11 @@ create table Participants
     spellCast4     int         not null,
     SummonerSpell1 int         not null,
     SummonerSpell2 int         not null,
-    Perks          int         not null,
+    PerksId        int         not null,
     TeamPosition   varchar(10) not null,
     primary key (GameId, SummonerPuuid),
     constraint Participants_ibfk_1
-        foreign key (Perks) references Perks (id)
+        foreign key (PerksId) references Perks (id)
             on update cascade on delete cascade,
     constraint Participants_ibfk_2
         foreign key (SummonerPuuid) references Summoners (Puuid)
@@ -48,87 +48,74 @@ create table Participants
 );
 
 create index Perks
-    on Participants (Perks);
+    on Participants (PerksId);
 
 create index SummonerPuuid
     on Participants (SummonerPuuid);
 
-create trigger after_participants_delete
+create trigger tgr_after_delete_participant
     after delete
     on Participants
     for each row
-BEGIN
-    UPDATE SummonnerChampionStats
+begin
+    UPDATE SummonnerChampionStats SCS
     SET GamesPlayed = GamesPlayed - 1
-    WHERE SummonerPuuid = OLD.SummonerPuuid
-      AND Champion = OLD.Champion;
+    WHERE SCS.SummonerPuuid = OLD.SummonerPuuid
+      AND SCS.Champion = OLD.Champion;
 
-    DELETE
-    FROM SummonnerChampionStats
-    WHERE GamesPlayed = 0;
-END;
+    DELETE FROM SummonnerChampionStats WHERE GamesPlayed = 0;
+end;
 
-create trigger after_participants_insert
+create trigger tgr_after_insert_participant
     after insert
     on Participants
     for each row
-BEGIN
-    INSERT INTO SummonnerChampionStats (SummonerPuuid, Champion, GamesPlayed)
-    VALUES (NEW.SummonerPuuid, NEW.Champion, 1)
-    ON DUPLICATE KEY UPDATE GamesPlayed = GamesPlayed + 1;
-END;
+    UPDATE SummonnerChampionStats SCS
+    SET GamesPlayed = GamesPlayed + 1
+    WHERE SCS.SummonerPuuid = NEW.SummonerPuuid
+      AND SCS.Champion = NEW.Champion;
 
-create trigger after_participants_update
+create trigger tgr_after_update_participant
     after update
     on Participants
     for each row
-BEGIN
-    IF (OLD.SummonerPuuid != NEW.SummonerPuuid OR OLD.Champion != NEW.Champion) THEN
-        UPDATE SummonnerChampionStats
+    IF OLD.Champion != NEW.Champion THEN
+        UPDATE SummonnerChampionStats SCS
         SET GamesPlayed = GamesPlayed - 1
-        WHERE SummonerPuuid = OLD.SummonerPuuid
-          AND Champion = OLD.Champion;
+        WHERE SCS.SummonerPuuid = OLD.SummonerPuuid
+          AND SCS.Champion = OLD.Champion;
 
-        DELETE
-        FROM SummonnerChampionStats
-        WHERE GamesPlayed = 0;
-
-        INSERT INTO SummonnerChampionStats (SummonerPuuid, Champion, GamesPlayed)
-        VALUES (NEW.SummonerPuuid, NEW.Champion, 1)
-        ON DUPLICATE KEY UPDATE GamesPlayed = GamesPlayed + 1;
+        UPDATE SummonnerChampionStats SCS
+        SET GamesPlayed = GamesPlayed + 1
+        WHERE SCS.SummonerPuuid = NEW.SummonerPuuid
+          AND SCS.Champion = NEW.Champion;
     END IF;
-END;
 
 create table Perks
 (
-    id             int auto_increment
+    id               int auto_increment
         primary key,
-    statPerks      int not null,
-    primaryStyle   int not null,
-    secondaryStyle int not null,
-    constraint idx_statPerks_unq
-        unique (statPerks, primaryStyle, secondaryStyle),
+    statPerksId      int not null,
+    primaryStyleId   int not null,
+    secondaryStyleId int not null,
     constraint Perks_ibfk_1
-        foreign key (statPerks) references StatPerks (id)
-            on update cascade on delete cascade,
-    constraint Perks_ibfk_2
-        foreign key (primaryStyle) references PerksStyle (id)
-            on update cascade on delete cascade,
-    constraint Perks_ibfk_3
-        foreign key (secondaryStyle) references PerksStyle (id)
+        foreign key (statPerksId) references StatPerks (id)
             on update cascade on delete cascade
 );
 
+create index idx_statPerks_unq
+    on Perks (statPerksId, primaryStyleId, secondaryStyleId);
+
 create index primaryStyle
-    on Perks (primaryStyle);
+    on Perks (primaryStyleId);
 
 create index secondaryStyle
-    on Perks (secondaryStyle);
+    on Perks (secondaryStyleId);
 
 create index statPerks
-    on Perks (statPerks);
+    on Perks (statPerksId);
 
-create table PerksStyle
+create table PerksStyles
 (
     id              int auto_increment
         primary key,
@@ -143,16 +130,16 @@ create table PerksStyle
 );
 
 create index styleSelection1
-    on PerksStyle (styleSelection1);
+    on PerksStyles (styleSelection1);
 
 create index styleSelection2
-    on PerksStyle (styleSelection2);
+    on PerksStyles (styleSelection2);
 
 create index styleSelection3
-    on PerksStyle (styleSelection3);
+    on PerksStyles (styleSelection3);
 
 create index styleSelection4
-    on PerksStyle (styleSelection4);
+    on PerksStyles (styleSelection4);
 
 create table Players
 (
@@ -177,17 +164,17 @@ create table StatPerks
 
 create table Summoners
 (
-    Id            varchar(63) not null,
-    Puuid         varchar(78) not null
+    Id            varchar(63)  not null,
+    Puuid         varchar(78)  not null
         primary key,
-    Name          varchar(50) null,
-    AccountId     varchar(56) null,
-    ProfileIconId int         null,
-    RevisionDate  bigint      null,
-    Level         bigint      null,
-    PlatformId    varchar(10) not null,
-    GameName      varchar(50) null,
-    TagLine       varchar(5)  null
+    Name          varchar(100) null,
+    AccountId     varchar(56)  null,
+    ProfileIconId int          null,
+    RevisionDate  bigint       null,
+    Level         bigint       null,
+    PlatformId    varchar(10)  not null,
+    GameName      varchar(50)  null,
+    TagLine       varchar(5)   null
 );
 
 create table SummonnerChampionStats
@@ -280,9 +267,9 @@ select G.GameDuration                 AS GameDuration,
        secondaryStyle.styleSelection1 AS secStyleSelection1,
        secondaryStyle.styleSelection2 AS secStyleSelection2
 from ((((((games G join participants P on ((G.GameId = P.GameId))) join summoners S
-          on ((P.SummonerPuuid = S.Puuid))) join perks P2 on ((P2.id = P.Perks))) join perksstyle primaryStyle
-        on ((primaryStyle.id = P2.primaryStyle))) join perksstyle secondaryStyle
-       on ((secondaryStyle.id = P2.secondaryStyle))) join statperks on ((statperks.id = P2.statPerks)));
+          on ((P.SummonerPuuid = S.Puuid))) join perks P2 on ((P2.id = P.PerksId))) join perksstyles primaryStyle
+        on ((primaryStyle.id = P2.primaryStyleId))) join perksstyles secondaryStyle
+       on ((secondaryStyle.id = P2.secondaryStyleId))) join statperks on ((statperks.id = P2.statPerksId)));
 
 create view lastgamestarttimestampbyplayerpuuids as
 select distinct lst.SummonerPuuid          AS SummonerPuuid,
@@ -406,7 +393,7 @@ BEGIN
 END;
 
 create procedure insertParticipant(IN p_GameId bigint, IN p_SummonerPuuid varchar(78), IN p_SummonerId varchar(63),
-                                   IN p_SummonerLevel bigint, IN p_SummonerName varchar(50), IN p_GameName varchar(50),
+                                   IN p_SummonerLevel bigint, IN p_SummonerName varchar(100), IN p_GameName varchar(50),
                                    IN p_TagLine varchar(50), IN p_Champion int, IN p_TeamId int, IN p_Kills int,
                                    IN p_Deaths int, IN p_Assists int, IN p_Item0 int, IN p_Item1 int, IN p_Item2 int,
                                    IN p_Item3 int, IN p_Item4 int, IN p_Item5 int, IN p_Item6 int, IN p_SpellCast1 int,
@@ -430,12 +417,12 @@ BEGIN
     SELECT id
     INTO p_Id
     FROM Perks
-    WHERE statPerks = p_StatPerks
-      AND primaryStyle = p_PrimaryStyle
-      AND secondaryStyle = p_SecondaryStyle;
+    WHERE statPerksId = p_StatPerks
+      AND primaryStyleId = p_PrimaryStyle
+      AND secondaryStyleId = p_SecondaryStyle;
 
     IF p_Id IS NULL THEN
-        INSERT INTO Perks (statPerks, primaryStyle, secondaryStyle)
+        INSERT INTO Perks (statPerksId, primaryStyleId, secondaryStyleId)
         VALUES (p_StatPerks, p_PrimaryStyle, p_SecondaryStyle)
         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id);
         SET p_Id = LAST_INSERT_ID();
@@ -448,16 +435,21 @@ create procedure insertPerksStyle(IN p_Description varchar(50), IN p_Style int, 
 BEGIN
     SELECT id
     INTO p_Id
-    FROM PerksStyle
+    FROM PerksStyles
     WHERE description = p_Description
       AND style = p_Style
       AND styleSelection1 = p_StyleSelection1
       AND styleSelection2 = p_StyleSelection2
-      AND styleSelection3 = p_StyleSelection3
-      AND styleSelection4 = p_StyleSelection4;
+      AND (
+        (styleSelection3 = p_StyleSelection3) OR (styleSelection3 IS NULL AND p_StyleSelection3 IS NULL)
+        )
+      AND (
+        (styleSelection4 = p_StyleSelection4) OR (styleSelection4 IS NULL AND p_StyleSelection4 IS NULL)
+        )
+    LIMIT 1;
 
     IF p_Id IS NULL THEN
-        INSERT INTO PerksStyle (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4)
+        INSERT INTO PerksStyles (description, style, styleSelection1, styleSelection2, styleSelection3, styleSelection4)
         VALUES (p_Description, p_Style, p_StyleSelection1, p_StyleSelection2, p_StyleSelection3, p_StyleSelection4)
         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id);
         SET p_Id = LAST_INSERT_ID();
@@ -486,7 +478,7 @@ BEGIN
     END IF;
 END;
 
-create procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78), IN p_Name varchar(50),
+create procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78), IN p_Name varchar(100),
                                 IN p_AccountId varchar(56), IN p_ProfileIconId int, IN p_RevisionDate bigint,
                                 IN p_Level bigint, IN p_PlatformId varchar(50), IN p_GameName varchar(50),
                                 IN p_TagLine varchar(5))
