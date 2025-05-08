@@ -507,39 +507,6 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return players;
     }
 
-    public async Task<Dictionary<PlatformRoute, List<(string, long)>>> GetPlayerPuuidsWithoutGamesAsync()
-    {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query =
-            "SELECT * FROM playerswithoutgames";
-
-        await using var command = new MySqlCommand(query, connection);
-
-        await using var reader = await command.ExecuteReaderAsync();
-
-        if (!reader.HasRows) return [];
-
-        var players = new Dictionary<PlatformRoute, List<(string, long)>>();
-
-        while (await reader.ReadAsync())
-        {
-            var puuid = reader.GetString("Puuid");
-            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
-
-            if (!players.TryGetValue(platform, out var value))
-            {
-                value = [];
-                players[platform] = value;
-            }
-
-            value.Add((puuid, 0));
-        }
-
-        return players;
-    }
-
     public async Task<ConcurrentDictionary<PlatformRoute, ConcurrentBag<Player>>> GetPlayersAsync()
     {
         await using var connection = databaseConnection.GetConnection();
@@ -591,20 +558,29 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         return summoners;
     }
 
-    public async Task<List<string>> GetSummonerIdsAsync()
+    public async Task<List<(string, PlatformRoute)>> GetIncompleteMatchesAsync()
     {
+        var matchIds = new List<(string, PlatformRoute)>();
+
         await using var connection = databaseConnection.GetConnection();
         await connection.OpenAsync();
 
-        var query = "SELECT Id FROM Summoners";
+        var query = @"
+        SELECT MatchId, PlatformId
+        FROM Games G
+        LEFT JOIN Participants P ON P.GameId = G.GameId
+        GROUP BY MatchId, PlatformId
+        HAVING COUNT(DISTINCT P.SummonerPuuid) != 10";
+
         await using var command = new MySqlCommand(query, connection);
 
         await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            matchIds.Add((reader.GetString("MatchId"), Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"))));
+        }
 
-        List<string> summonerIds = [];
-        while (await reader.ReadAsync()) summonerIds.Add(reader.GetString("Id"));
-
-        return summonerIds;
+        return matchIds;
     }
 
     private Summoner CreateSummonerFromReader(DbDataReader reader)
@@ -647,5 +623,41 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         command.Parameters.AddWithValue("@Puuid", summonerPuuid);
 
         return await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<int> DeleteGameAsync(string matchId)
+    {
+        await using var connection = databaseConnection.GetConnection();
+        await connection.OpenAsync();
+
+        var query = "DELETE FROM Games WHERE MatchId = @MatchId";
+        await using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@MatchId", matchId);
+
+        return await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<ConcurrentBag<(PlatformRoute, Summoner)>> GetSummonersByLastUpdateTimeASync(DateTime lastUpdateTime)
+    {
+        await using var connection = databaseConnection.GetConnection();
+        await connection.OpenAsync();
+
+        var query = "SELECT * FROM Summoners WHERE lastUpdate IS NULL OR lastUpdate < @LastUpdateTime ORDER BY lastUpdate DESC";
+        await using var command = new MySqlCommand(query, connection);
+        command.Parameters.AddWithValue("@LastUpdateTime", lastUpdateTime);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!reader.HasRows) return [];
+
+        var summoners = new ConcurrentBag<(PlatformRoute, Summoner)>();
+
+        while (await reader.ReadAsync())
+        {
+            var summoner = CreateSummonerFromReader(reader);
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            summoners.Add((platform, summoner));
+        }
+
+        return summoners;
     }
 }

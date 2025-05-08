@@ -12,3 +12,5 @@ riderModule.iml
 /Folder.DotSettings.user
 /.env
 /src/Services/RiotApiClient.cs
+/libs/
+/publish/
