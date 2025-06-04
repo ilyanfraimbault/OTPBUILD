@@ -2,13 +2,13 @@ create table Games
 (
     GameDuration       int         not null,
     GameStartTimestamp bigint      not null,
-    GameId             bigint      not null
-        primary key,
+    GameId             bigint      not null,
     GameVersion        varchar(50) not null,
     GameType           varchar(50) not null,
     MatchId            varchar(50) not null,
     PlatformId         varchar(10) not null,
-    Winner             int         not null
+    Winner             int         not null,
+    primary key (GameId)
 );
 
 create table Participants
@@ -79,17 +79,59 @@ create trigger tgr_after_update_participant
     after update
     on Participants
     for each row
+BEGIN
+    -- Si le champion a changé
     IF OLD.Champion != NEW.Champion THEN
+        -- Décrémenter le compteur pour l'ancien champion
         UPDATE SummonnerChampionStats SCS
         SET GamesPlayed = GamesPlayed - 1
         WHERE SCS.SummonerPuuid = OLD.SummonerPuuid
           AND SCS.Champion = OLD.Champion;
 
-        UPDATE SummonnerChampionStats SCS
-        SET GamesPlayed = GamesPlayed + 1
-        WHERE SCS.SummonerPuuid = NEW.SummonerPuuid
-          AND SCS.Champion = NEW.Champion;
+        -- Vérifier si le nouveau champion existe déjà
+        IF NOT EXISTS (SELECT 1
+                       FROM SummonnerChampionStats SCS
+                       WHERE SCS.SummonerPuuid = NEW.SummonerPuuid
+                         AND SCS.Champion = NEW.Champion) THEN
+            -- Insérer une nouvelle ligne pour le nouveau champion
+            INSERT INTO SummonnerChampionStats (SummonerPuuid, Champion, GamesPlayed)
+            VALUES (NEW.SummonerPuuid, NEW.Champion, 1);
+        ELSE
+            -- Incrémenter le compteur pour le nouveau champion
+            UPDATE SummonnerChampionStats SCS
+            SET GamesPlayed = GamesPlayed + 1
+            WHERE SCS.SummonerPuuid = NEW.SummonerPuuid
+              AND SCS.Champion = NEW.Champion;
+        END IF;
     END IF;
+
+    -- Si le SummonerPuuid a changé
+    IF OLD.SummonerPuuid != NEW.SummonerPuuid THEN
+        -- Décrémenter le compteur pour l'ancien SummonerPuuid
+        UPDATE SummonnerChampionStats SCS
+        SET GamesPlayed = GamesPlayed - 1
+        WHERE SCS.SummonerPuuid = OLD.SummonerPuuid
+          AND SCS.Champion = OLD.Champion;
+
+        -- Vérifier si le nouveau SummonerPuuid et Champion existent déjà
+        IF NOT EXISTS (SELECT 1
+                       FROM SummonnerChampionStats SCS
+                       WHERE SCS.SummonerPuuid = NEW.SummonerPuuid
+                         AND SCS.Champion = NEW.Champion) THEN
+            -- Insérer une nouvelle ligne pour le nouveau SummonerPuuid et Champion
+            INSERT INTO SummonnerChampionStats (SummonerPuuid, Champion, GamesPlayed)
+            VALUES (NEW.SummonerPuuid, NEW.Champion, 1);
+        ELSE
+            -- Incrémenter le compteur pour le nouveau SummonerPuuid et Champion
+            UPDATE SummonnerChampionStats SCS
+            SET GamesPlayed = GamesPlayed + 1
+            WHERE SCS.SummonerPuuid = NEW.SummonerPuuid
+              AND SCS.Champion = NEW.Champion;
+        END IF;
+    END IF;
+
+    DELETE FROM SummonnerChampionStats WHERE GamesPlayed = 0;
+END;
 
 create table Perks
 (
@@ -98,13 +140,18 @@ create table Perks
     statPerksId      int not null,
     primaryStyleId   int not null,
     secondaryStyleId int not null,
+    constraint idx_statPerks_unq
+        unique (statPerksId, primaryStyleId, secondaryStyleId),
     constraint Perks_ibfk_1
         foreign key (statPerksId) references StatPerks (id)
+            on update cascade on delete cascade,
+    constraint primaryStyle_PerksStyles
+        foreign key (primaryStyleId) references PerksStyles (id)
+            on update cascade on delete cascade,
+    constraint secondaryStyle_PerksStyles
+        foreign key (secondaryStyleId) references PerksStyles (id)
             on update cascade on delete cascade
 );
-
-create index idx_statPerks_unq
-    on Perks (statPerksId, primaryStyleId, secondaryStyleId);
 
 create index primaryStyle
     on Perks (primaryStyleId);
@@ -165,8 +212,7 @@ create table StatPerks
 create table Summoners
 (
     Id            varchar(63)  not null,
-    Puuid         varchar(78)  not null
-        primary key,
+    Puuid         varchar(78)  not null,
     Name          varchar(100) null,
     AccountId     varchar(56)  null,
     ProfileIconId int          null,
@@ -174,7 +220,9 @@ create table Summoners
     Level         bigint       null,
     PlatformId    varchar(10)  not null,
     GameName      varchar(50)  null,
-    TagLine       varchar(5)   null
+    TagLine       varchar(5)   null,
+    lastUpdate    timestamp    null,
+    primary key (Puuid)
 );
 
 create table SummonnerChampionStats
@@ -193,7 +241,7 @@ create table event_logs
     message    text                                null
 );
 
-create view championstats as
+create or replace view championstats as
 select P.Champion                                                                                  AS Champion,
        (count(0) / (select count(0) from participants where (participants.Champion = P.Champion))) AS winRate,
        count(0)                                                                                    AS GamesPlayed
@@ -202,7 +250,7 @@ where (P.TeamId = G.Winner)
 group by P.Champion
 order by count(0);
 
-create view findnewplayers as
+create or replace view findnewplayers as
 select scp.SummonerPuuid    AS SummonerPuuid,
        scp.Champion         AS Champion,
        scp.GamesPlayed      AS GamesPlayed,
@@ -214,12 +262,12 @@ where exists(select 1
              where ((P.SummonerPuuid = scp.SummonerPuuid) and (P.Champion = scp.Champion))) is false
 order by (scp.PlayRate * scp.GamesPlayed) desc;
 
-create view gamesplayedbyplatformid as
+create or replace view gamesplayedbyplatformid as
 select G.PlatformId AS PlatformId, count(0) AS GamesPlayed
 from games G
 group by G.PlatformId;
 
-create view gamesview as
+create or replace view gamesview as
 select G.GameDuration                 AS GameDuration,
        G.GameStartTimestamp           AS GamestartTimestamp,
        G.GameId                       AS GameId,
@@ -271,13 +319,13 @@ from ((((((games G join participants P on ((G.GameId = P.GameId))) join summoner
         on ((primaryStyle.id = P2.primaryStyleId))) join perksstyles secondaryStyle
        on ((secondaryStyle.id = P2.secondaryStyleId))) join statperks on ((statperks.id = P2.statPerksId)));
 
-create view lastgamestarttimestampbyplayerpuuids as
+create or replace view lastgamestarttimestampbyplayerpuuids as
 select distinct lst.SummonerPuuid          AS SummonerPuuid,
                 lst.LastGamestartTimestamp AS LastGamestartTimestamp,
                 lst.PlatformId             AS PlatformId
 from (lastgamestarttimestampbysummoner LST join players P on ((lst.SummonerPuuid = P.SummonerPuuid)));
 
-create view lastgamestarttimestampbysummoner as
+create or replace view lastgamestarttimestampbysummoner as
 select S.Puuid                                AS SummonerPuuid,
        coalesce(max(G.GameStartTimestamp), 0) AS LastGamestartTimestamp,
        S.PlatformId                           AS PlatformId
@@ -285,7 +333,7 @@ from ((summoners S left join participants P on ((S.Puuid = P.SummonerPuuid))) le
       on ((P.GameId = G.GameId)))
 group by S.Puuid;
 
-create view playersstats as
+create or replace view playersstats as
 select SCS.SummonerPuuid                               AS SummonerPuuid,
        SCS.Champion                                    AS Champion,
        SCS.GamesPlayed                                 AS GamesPlayed,
@@ -295,7 +343,7 @@ from (summonnerchampionstats SCS join totalgamesplayedbysummoner TotalGamesPlaye
       on ((SCS.SummonerPuuid = totalgamesplayed.SummonerPuuid)))
 where SCS.SummonerPuuid in (select players.SummonerPuuid from players);
 
-create view playerswithoutgames as
+create or replace view playerswithoutgames as
 select distinct S.Id            AS Id,
                 S.Puuid         AS Puuid,
                 S.Name          AS Name,
@@ -309,12 +357,12 @@ from ((players P left join participants P2
       on ((P.SummonerPuuid = S.Puuid)))
 where (P2.GameId is null);
 
-create view sidewinrate as
+create or replace view sidewinrate as
 select (blue.blueSide / (blue.blueSide + red.redSide)) AS blueWinRate,
        (red.redSide / (blue.blueSide + red.redSide))   AS redWinRate
 from ((select count(0) AS blueSide from games where (games.Winner = '100')) blue join (select count(0) AS redSide from games where (games.Winner = '200')) red);
 
-create view summonerchampionplayrates as
+create or replace view summonerchampionplayrates as
 select SCS.SummonerPuuid                               AS SummonerPuuid,
        SCS.Champion                                    AS Champion,
        SCS.GamesPlayed                                 AS GamesPlayed,
@@ -323,12 +371,12 @@ select SCS.SummonerPuuid                               AS SummonerPuuid,
 from (summonnerchampionstats SCS join totalgamesplayedbysummoner TotalGamesPlayed
       on ((SCS.SummonerPuuid = totalgamesplayed.SummonerPuuid)));
 
-create view summonersbyplatformid as
+create or replace view summonersbyplatformid as
 select S.PlatformId AS PlatformId, count(0) AS Count
 from summoners S
 group by S.PlatformId;
 
-create view summonerstatsbychampion as
+create or replace view summonerstatsbychampion as
 select P.SummonerPuuid AS SummonerPuuid,
        P.Champion      AS Champion,
        sum(P.Kills)    AS Kills,
@@ -338,7 +386,7 @@ select P.SummonerPuuid AS SummonerPuuid,
 from participants P
 group by P.SummonerPuuid, P.Champion;
 
-create view totalgamesplayedbysummoner as
+create or replace view totalgamesplayedbysummoner as
 select SCS.SummonerPuuid AS SummonerPuuid, sum(SCS.GamesPlayed) AS TotalGames
 from summonnerchampionstats SCS
 group by SCS.SummonerPuuid;
@@ -484,9 +532,9 @@ create procedure insertSummoner(IN p_Id varchar(63), IN p_Puuid varchar(78), IN 
                                 IN p_TagLine varchar(5))
 BEGIN
     INSERT INTO Summoners (Id, Puuid, Name, AccountId, ProfileIconId, RevisionDate, Level, PlatformId, GameName,
-                           TagLine)
+                           TagLine, lastUpdate)
     VALUES (p_Id, p_Puuid, p_Name, p_AccountId, p_ProfileIconId, p_RevisionDate, p_Level, p_PlatformId, p_GameName,
-            p_TagLine)
+            p_TagLine, NOW())
     ON DUPLICATE KEY UPDATE Name          = IFNULL(Name, p_Name),
                             AccountId     = IFNULL(AccountId, p_AccountId),
                             ProfileIconId = IFNULL(ProfileIconId, p_ProfileIconId),
@@ -494,7 +542,8 @@ BEGIN
                             Level         = IFNULL(Level, p_Level),
                             PlatformId    = IFNULL(PlatformId, p_PlatformId),
                             GameName      = IFNULL(GameName, p_GameName),
-                            TagLine       = IFNULL(TagLine, p_TagLine);
+                            TagLine       = IFNULL(TagLine, p_TagLine),
+                            lastUpdate    = IFNULL(lastUpdate, NOW());
 END;
 
 create event insert_new_players on schedule
@@ -503,7 +552,18 @@ create event insert_new_players on schedule
     enable
     do
     BEGIN
-        CALL EventInsertNewPlayers();
+        DECLARE rows_inserted INT DEFAULT 0;
+
+        INSERT INTO players (SummonerPuuid, Champion)
+        SELECT SummonerPuuid, Champion
+        FROM findnewplayers
+        WHERE GamesPlayed >= 50
+          AND playrate > 0.8;
+
+        SET rows_inserted = ROW_COUNT();
+
+        INSERT INTO event_logs (message)
+        VALUES (CONCAT('Inserted ', rows_inserted, ' new players.'));
     END;
 
 create event remove_inactive_players on schedule
