@@ -5,7 +5,7 @@ using Camille.Enums;
 using Camille.RiotGames.AccountV1;
 using Camille.RiotGames.MatchV5;
 using Camille.RiotGames.SummonerV4;
-using MySql.Data.MySqlClient;
+using Npgsql;
 using OTPBUILD.Models;
 using Team = Camille.RiotGames.Enums.Team;
 
@@ -15,21 +15,15 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 {
     public async Task<int> InsertGameAsync(Game game)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query =
-            "CALL insertGame(@GameId, @GameDuration, @GameStartTimestamp, @GameVersion, @GameType, @PlatformId, @Winner, @MatchId)";
-
-        await using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@GameId", game.GameId);
-        command.Parameters.AddWithValue("@GameDuration", game.GameDuration);
-        command.Parameters.AddWithValue("@GameStartTimestamp", game.GameStartTimestamp);
-        command.Parameters.AddWithValue("@GameVersion", game.GameVersion);
-        command.Parameters.AddWithValue("@GameType", game.GameType);
-        command.Parameters.AddWithValue("@PlatformId", game.PlatformRoute.ToString());
-        command.Parameters.AddWithValue("@Winner", game.Winner);
-        command.Parameters.AddWithValue("@MatchId", game.MatchId);
+        var command = databaseConnection.CreateStoredProcedure("insert_game");
+        command.Parameters.AddWithValue("p_game_id", game.GameId);
+        command.Parameters.AddWithValue("p_game_duration", game.GameDuration);
+        command.Parameters.AddWithValue("p_game_start_timestamp", game.GameStartTimestamp);
+        command.Parameters.AddWithValue("p_game_version", game.GameVersion);
+        command.Parameters.AddWithValue("p_game_type", game.GameType.ToString());
+        command.Parameters.AddWithValue("p_platform_id", game.PlatformRoute.ToString());
+        command.Parameters.AddWithValue("p_winner", (int)game.Winner);
+        command.Parameters.AddWithValue("p_match_id", game.MatchId);
         var result = await command.ExecuteNonQueryAsync();
 
         if (result <= 0) return result;
@@ -44,11 +38,8 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<int> InsertAccountAsync(Account account)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "UPDATE Summoners SET GameName = @GameName, TagLine = @TagLine WHERE Puuid = @Puuid";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "UPDATE Summoners SET GameName = @GameName, TagLine = @TagLine WHERE Puuid = @Puuid";
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@Puuid", account.Puuid);
         command.Parameters.AddWithValue("@GameName", account.GameName);
         command.Parameters.AddWithValue("@TagLine", account.TagLine);
@@ -58,79 +49,63 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<int> InsertSummonerAsync(Summoner summoner, PlatformRoute platformRoute)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query =
-            "CALL insertSummoner(@SummonerId, @Puuid, @Name, @AccountId, @ProfileIconId, @RevisionDate, @SummonerLevel, @PlatformId, @GameName, @TagLine)";
-        await using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@SummonerId", summoner.Id);
-        command.Parameters.AddWithValue("@Puuid", summoner.Puuid);
-        command.Parameters.AddWithValue("@Name", DBNull.Value);
-        command.Parameters.AddWithValue("@AccountId", summoner.AccountId);
-        command.Parameters.AddWithValue("@ProfileIconId", summoner.ProfileIconId);
-        command.Parameters.AddWithValue("@RevisionDate", summoner.RevisionDate);
-        command.Parameters.AddWithValue("@SummonerLevel", summoner.SummonerLevel);
-        command.Parameters.AddWithValue("@PlatformId", platformRoute.ToString());
-        command.Parameters.AddWithValue("@GameName", DBNull.Value);
-        command.Parameters.AddWithValue("@TagLine", DBNull.Value);
+        var command = databaseConnection.CreateStoredProcedure("insert_summoner");
+        command.Parameters.AddWithValue("p_summoner_id", summoner.Id);
+        command.Parameters.AddWithValue("p_puuid", summoner.Puuid);
+        command.Parameters.AddWithValue("p_name", DBNull.Value);
+        command.Parameters.AddWithValue("p_account_id", summoner.AccountId);
+        command.Parameters.AddWithValue("p_profile_icon_id", summoner.ProfileIconId);
+        command.Parameters.AddWithValue("p_revision_date", summoner.RevisionDate);
+        command.Parameters.AddWithValue("p_summoner_level", summoner.SummonerLevel);
+        command.Parameters.AddWithValue("p_platform_id", platformRoute.ToString());
+        command.Parameters.AddWithValue("p_game_name", DBNull.Value);
+        command.Parameters.AddWithValue("p_tag_line", DBNull.Value);
 
         return await command.ExecuteNonQueryAsync();
     }
 
     public async Task<int> InsertParticipantAsync(GameParticipant participant, Game game)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
         var perksId = await InsertPerksAsync(participant.Perks);
 
-        var participantQuery =
-            "CALL insertParticipant(@GameId, @SummonerPuuid, @SummonerId, @SummonerLevel, @SummonerName, @GameName, @TagLine, @Champion, @TeamId, @Kills, @Deaths, @Assists, " +
-            "@Item0, @Item1, @Item2, @Item3, @Item4, @Item5, @Item6, " +
-            "@SpellCast1, @SpellCast2, @SpellCast3, @SpellCast4, @SummonerSpell1, @SummonerSpell2, @Perks, @TeamPosition, @PlatformId)";
-        await using var participantCommand = new MySqlCommand(participantQuery, connection);
-        participantCommand.Parameters.AddWithValue("@GameId", game.GameId);
-        participantCommand.Parameters.AddWithValue("@SummonerPuuid", participant.Puuid);
-        participantCommand.Parameters.AddWithValue("@SummonerId", participant.SummonerId);
-        participantCommand.Parameters.AddWithValue("@SummonerLevel", participant.SummonerLevel);
-        participantCommand.Parameters.AddWithValue("@SummonerName", participant.SummonerName);
-        participantCommand.Parameters.AddWithValue("@GameName", participant.RiotIdGameName);
-        participantCommand.Parameters.AddWithValue("@TagLine", participant.RiotIdTagline);
-        participantCommand.Parameters.AddWithValue("@Champion", participant.Champion);
-        participantCommand.Parameters.AddWithValue("@TeamId", participant.TeamId);
-        participantCommand.Parameters.AddWithValue("@Kills", participant.Kills);
-        participantCommand.Parameters.AddWithValue("@Deaths", participant.Deaths);
-        participantCommand.Parameters.AddWithValue("@Assists", participant.Assists);
+        var command = databaseConnection.CreateStoredProcedure("insert_participant");
+        command.Parameters.AddWithValue("p_game_id", game.GameId);
+        command.Parameters.AddWithValue("p_summoner_puuid", participant.Puuid);
+        command.Parameters.AddWithValue("p_summoner_id", participant.SummonerId);
+        command.Parameters.AddWithValue("p_summoner_level", participant.SummonerLevel);
+        command.Parameters.AddWithValue("p_summoner_name", participant.SummonerName);
+        command.Parameters.AddWithValue("p_game_name", participant.RiotIdGameName);
+        command.Parameters.AddWithValue("p_tag_line", participant.RiotIdTagline);
+        command.Parameters.AddWithValue("p_champion", (int)participant.Champion);
+        command.Parameters.AddWithValue("p_team_id", (int)participant.TeamId);
+        command.Parameters.AddWithValue("p_kills", participant.Kills);
+        command.Parameters.AddWithValue("p_deaths", participant.Deaths);
+        command.Parameters.AddWithValue("p_assists", participant.Assists);
         for (var i = 0; i < 7; i++)
-            participantCommand.Parameters.AddWithValue($"@Item{i}", participant.Items[i]);
+            command.Parameters.AddWithValue($"p_item{i}", participant.Items[i]);
         for (var i = 0; i < 4; i++)
-            participantCommand.Parameters.AddWithValue($"@SpellCast{i + 1}", participant.SpellsCasts[i]);
-        participantCommand.Parameters.AddWithValue("@SummonerSpell1", participant.SummonerSpells.Item1);
-        participantCommand.Parameters.AddWithValue("@SummonerSpell2", participant.SummonerSpells.Item2);
-        participantCommand.Parameters.AddWithValue("@Perks", perksId);
-        participantCommand.Parameters.AddWithValue("@TeamPosition", participant.TeamPosition);
-        participantCommand.Parameters.AddWithValue("@PlatformId", game.PlatformRoute.ToString());
+            command.Parameters.AddWithValue($"p_spell_cast{i + 1}", participant.SpellsCasts[i]);
+        command.Parameters.AddWithValue("p_summoner_spell1", participant.SummonerSpells.Item1);
+        command.Parameters.AddWithValue("p_summoner_spell2", participant.SummonerSpells.Item2);
+        command.Parameters.AddWithValue("p_perks", perksId);
+        command.Parameters.AddWithValue("p_team_position", participant.TeamPosition);
+        command.Parameters.AddWithValue("p_platform_id", game.PlatformRoute.ToString());
 
-        return await participantCommand.ExecuteNonQueryAsync();
+        return await command.ExecuteNonQueryAsync();
     }
 
-    private async Task<int> InsertPerksAsync(Perks perks)
+    private async Task<int?> InsertPerksAsync(Perks perks)
     {
         var statPerksId = await InsertStatPerksAsync(perks.StatPerks);
         var primaryStyleId = await InsertPerksStyleAsync(perks.Styles[0]);
         var secondaryStyleId = await InsertPerksStyleAsync(perks.Styles[1]);
 
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
+        var command = databaseConnection.CreateStoredProcedure("insert_perks");
+        command.Parameters.AddWithValue("p_stat_perks", statPerksId);
+        command.Parameters.AddWithValue("p_primary_style", primaryStyleId);
+        command.Parameters.AddWithValue("p_secondary_style", secondaryStyleId);
 
-        var query = "CALL insertPerks(@StatPerks, @PrimaryStyle, @SecondaryStyle, @Id)";
-        await using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@StatPerks", statPerksId);
-        command.Parameters.AddWithValue("@PrimaryStyle", primaryStyleId);
-        command.Parameters.AddWithValue("@SecondaryStyle", secondaryStyleId);
-
-        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        var idParam = new NpgsqlParameter("p_id", NpgsqlTypes.NpgsqlDbType.Integer)
         {
             Direction = ParameterDirection.Output
         };
@@ -138,24 +113,19 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         await command.ExecuteNonQueryAsync();
 
-        return (int)idParam.Value;
+        return (int?)idParam.Value;
     }
 
-    private async Task<int> InsertPerksStyleAsync(PerkStyle style)
+    private async Task<int?> InsertPerksStyleAsync(PerkStyle style)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query =
-            "CALL insertPerksStyle(@Description, @Style, @StyleSelection1, @StyleSelection2, @StyleSelection3, @StyleSelection4, @Id)";
-        await using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Description", style.Description);
-        command.Parameters.AddWithValue("@Style", style.Style);
+        var command = databaseConnection.CreateStoredProcedure("insert_perks_style");
+        command.Parameters.AddWithValue("p_description", style.Description);
+        command.Parameters.AddWithValue("p_style", style.Style);
         for (var i = 0; i < 4; i++)
-            command.Parameters.AddWithValue($"@StyleSelection{i + 1}",
+            command.Parameters.AddWithValue($"p_style_selection{i + 1}",
                 style.Selections.Length > i ? style.Selections[i].Perk : DBNull.Value);
 
-        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        var idParam = new NpgsqlParameter("p_id", NpgsqlTypes.NpgsqlDbType.Integer)
         {
             Direction = ParameterDirection.Output
         };
@@ -163,21 +133,17 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         await command.ExecuteNonQueryAsync();
 
-        return (int)idParam.Value;
+        return (int?)idParam.Value;
     }
 
-    private async Task<int> InsertStatPerksAsync(PerkStats stats)
+    private async Task<int?> InsertStatPerksAsync(PerkStats stats)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
+        var command = databaseConnection.CreateStoredProcedure("insert_stat_perks");
+        command.Parameters.AddWithValue("p_defense", stats.Defense);
+        command.Parameters.AddWithValue("p_flex", stats.Flex);
+        command.Parameters.AddWithValue("p_offense", stats.Offense);
 
-        var query = "CALL insertStatPerks(@Defense, @Flex, @Offense, @Id)";
-        await using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Defense", stats.Defense);
-        command.Parameters.AddWithValue("@Flex", stats.Flex);
-        command.Parameters.AddWithValue("@Offense", stats.Offense);
-
-        var idParam = new MySqlParameter("@Id", MySqlDbType.Int32)
+        var idParam = new NpgsqlParameter("p_id", NpgsqlTypes.NpgsqlDbType.Integer)
         {
             Direction = ParameterDirection.Output
         };
@@ -185,20 +151,16 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         await command.ExecuteNonQueryAsync();
 
-        return (int)idParam.Value;
+        return (int?)idParam.Value;
     }
 
     public async Task<int> InsertPlayerAsync(Player player, PlatformRoute platformRoute)
     {
         await InsertSummonerAsync(player.Summoner, platformRoute);
 
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "CALL insertPlayer(@SummonerPuuid, @Champion)";
-        await using var command = new MySqlCommand(query, connection);
-        command.Parameters.AddWithValue("@SummonerPuuid", player.Summoner.Puuid);
-        command.Parameters.AddWithValue("@Champion", (int)player.Champion);
+        var command = databaseConnection.CreateStoredProcedure("insert_player");
+        command.Parameters.AddWithValue("p_summoner_puuid", player.Summoner.Puuid);
+        command.Parameters.AddWithValue("p_champion", (int)player.Champion);
 
         return await command.ExecuteNonQueryAsync();
     }
@@ -207,23 +169,24 @@ public class DatabaseService(DatabaseConnection databaseConnection)
     {
         var accounts = new ConcurrentDictionary<PlatformRoute, ConcurrentBag<Account>>();
 
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "SELECT PlatformId, Puuid, GameName, TagLine FROM Summoners";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT PlatformId, Puuid, GameName, TagLine FROM Summoners";
+        var command = databaseConnection.CreateCommand(query);
 
         await using var reader = await command.ExecuteReaderAsync();
 
         while (await reader.ReadAsync())
         {
-            var platformId = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            var platformId = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
 
             var account = new Account
             {
-                Puuid = reader.GetString("Puuid"),
-                GameName = reader.IsDBNull(reader.GetOrdinal("GameName")) ? null : reader.GetString("GameName"),
-                TagLine = reader.IsDBNull(reader.GetOrdinal("TagLine")) ? null : reader.GetString("TagLine")
+                Puuid = reader.GetString(reader.GetOrdinal("Puuid")),
+                GameName = reader.IsDBNull(reader.GetOrdinal("GameName"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("GameName")),
+                TagLine = reader.IsDBNull(reader.GetOrdinal("TagLine"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("TagLine"))
             };
 
             if (!accounts.TryGetValue(platformId, out ConcurrentBag<Account>? value))
@@ -242,41 +205,41 @@ public class DatabaseService(DatabaseConnection databaseConnection)
     {
         var perkStats = new PerkStats
         {
-            Defense = reader.GetInt32("defense"),
-            Flex = reader.GetInt32("flex"),
-            Offense = reader.GetInt32("offense")
+            Defense = reader.GetInt32(reader.GetOrdinal("defense")),
+            Flex = reader.GetInt32(reader.GetOrdinal("flex")),
+            Offense = reader.GetInt32(reader.GetOrdinal("offense"))
         };
 
         var primaryStyle = new PerkStyle
         {
-            Style = reader.GetInt32("primaryStyle"),
-            Description = reader.GetString("primaryStyleDescription"),
+            Style = reader.GetInt32(reader.GetOrdinal("primaryStyle")),
+            Description = reader.GetString(reader.GetOrdinal("primaryStyleDescription")),
             Selections =
             [
                 new PerkStyleSelection
                 {
-                    Perk = reader.GetInt32("primStyleSelection1"),
+                    Perk = reader.GetInt32(reader.GetOrdinal("primStyleSelection1")),
                     Var1 = 0,
                     Var2 = 0,
                     Var3 = 0
                 },
                 new PerkStyleSelection
                 {
-                    Perk = reader.GetInt32("primStyleSelection2"),
+                    Perk = reader.GetInt32(reader.GetOrdinal("primStyleSelection2")),
                     Var1 = 0,
                     Var2 = 0,
                     Var3 = 0
                 },
                 new PerkStyleSelection
                 {
-                    Perk = reader.GetInt32("primStyleSelection3"),
+                    Perk = reader.GetInt32(reader.GetOrdinal("primStyleSelection3")),
                     Var1 = 0,
                     Var2 = 0,
                     Var3 = 0
                 },
                 new PerkStyleSelection
                 {
-                    Perk = reader.GetInt32("primStyleSelection4"),
+                    Perk = reader.GetInt32(reader.GetOrdinal("primStyleSelection4")),
                     Var1 = 0,
                     Var2 = 0,
                     Var3 = 0
@@ -286,20 +249,20 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         var secondaryStyle = new PerkStyle
         {
-            Style = reader.GetInt32("secondaryStyle"),
-            Description = reader.GetString("secondaryStyleDescription"),
+            Style = reader.GetInt32(reader.GetOrdinal("secondaryStyle")),
+            Description = reader.GetString(reader.GetOrdinal("secondaryStyleDescription")),
             Selections =
             [
                 new PerkStyleSelection
                 {
-                    Perk = reader.GetInt32("secStyleSelection1"),
+                    Perk = reader.GetInt32(reader.GetOrdinal("secStyleSelection1")),
                     Var1 = 0,
                     Var2 = 0,
                     Var3 = 0
                 },
                 new PerkStyleSelection
                 {
-                    Perk = reader.GetInt32("secStyleSelection2"),
+                    Perk = reader.GetInt32(reader.GetOrdinal("secStyleSelection2")),
                     Var1 = 0,
                     Var2 = 0,
                     Var3 = 0
@@ -314,29 +277,36 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         };
 
         var participant = new GameParticipant(
-            reader.GetString("SummonerName"),
-            reader.GetString("SummonerId"),
-            reader.GetInt32("SummonerLevel"),
-            reader.GetString("SummonerPuuid"),
-            Enum.Parse<Champion>(reader.GetInt32("Champion").ToString()),
-            Enum.Parse<Team>(reader.GetInt32("TeamId").ToString()),
-            reader.GetString("TeamPosition"),
-            reader.GetInt32("Kills"),
-            reader.GetInt32("Deaths"),
-            reader.GetInt32("Assists"),
+            reader.GetString(reader.GetOrdinal("SummonerName")),
+            reader.GetString(reader.GetOrdinal("SummonerId")),
+            reader.GetInt32(reader.GetOrdinal("SummonerLevel")),
+            reader.GetString(reader.GetOrdinal("SummonerPuuid")),
+            Enum.Parse<Champion>(reader.GetInt32(reader.GetOrdinal("Champion")).ToString()),
+            Enum.Parse<Team>(reader.GetInt32(reader.GetOrdinal("TeamId")).ToString()),
+            reader.GetString(reader.GetOrdinal("TeamPosition")),
+            reader.GetInt32(reader.GetOrdinal("Kills")),
+            reader.GetInt32(reader.GetOrdinal("Deaths")),
+            reader.GetInt32(reader.GetOrdinal("Assists")),
             [
-                reader.GetInt32("Item0"), reader.GetInt32("Item1"), reader.GetInt32("Item2"),
-                reader.GetInt32("Item3"), reader.GetInt32("Item4"), reader.GetInt32("Item5"),
-                reader.GetInt32("Item6")
+                reader.GetInt32(reader.GetOrdinal("Item0")),
+                reader.GetInt32(reader.GetOrdinal("Item1")),
+                reader.GetInt32(reader.GetOrdinal("Item2")),
+                reader.GetInt32(reader.GetOrdinal("Item3")),
+                reader.GetInt32(reader.GetOrdinal("Item4")),
+                reader.GetInt32(reader.GetOrdinal("Item5")),
+                reader.GetInt32(reader.GetOrdinal("Item6"))
             ],
             [
-                reader.GetInt32("SpellCast1"), reader.GetInt32("SpellCast2"), reader.GetInt32("SpellCast3"),
-                reader.GetInt32("SpellCast4")
+                reader.GetInt32(reader.GetOrdinal("SpellCast1")),
+                reader.GetInt32(reader.GetOrdinal("SpellCast2")),
+                reader.GetInt32(reader.GetOrdinal("SpellCast3")),
+                reader.GetInt32(reader.GetOrdinal("SpellCast4"))
             ],
-            (reader.GetInt32("SummonerSpell1"), reader.GetInt32("SummonerSpell2")),
+            (reader.GetInt32(reader.GetOrdinal("SummonerSpell1")),
+                reader.GetInt32(reader.GetOrdinal("SummonerSpell2"))),
             perks,
-            reader.GetString("GameName"),
-            reader.GetString("Tagline")
+            reader.GetString(reader.GetOrdinal("GameName")),
+            reader.GetString(reader.GetOrdinal("TagLine"))
         );
 
         return Task.FromResult(participant);
@@ -344,12 +314,8 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<Game?> GetGameAsync(long gameId)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "SELECT * FROM gamesview G WHERE G.GameId = @GameId";
-
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT * FROM gamesview G WHERE G.GameId = @GameId";
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@GameId", gameId);
 
         await using var reader = await command.ExecuteReaderAsync();
@@ -357,13 +323,13 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         await reader.ReadAsync();
 
-        var gameDuration = reader.GetInt32("GameDuration");
-        var gameStartTimestamp = reader.GetInt64("GameStartTimestamp");
-        var gameVersion = reader.GetString("GameVersion");
-        var gameType = Enum.Parse<GameType>(reader.GetString("GameType"));
-        var matchId = reader.GetString("MatchId");
-        var platformId = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
-        var winner = Enum.Parse<Team>(reader.GetInt32("Winner").ToString());
+        var gameDuration = reader.GetInt32(reader.GetOrdinal("GameDuration"));
+        var gameStartTimestamp = reader.GetInt64(reader.GetOrdinal("GameStartTimestamp"));
+        var gameVersion = reader.GetString(reader.GetOrdinal("GameVersion"));
+        var gameType = Enum.Parse<GameType>(reader.GetString(reader.GetOrdinal("GameType")));
+        var matchId = reader.GetString(reader.GetOrdinal("MatchId"));
+        var platformId = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
+        var winner = Enum.Parse<Team>(reader.GetInt32(reader.GetOrdinal("Winner")).ToString());
 
         var game = new Game(gameDuration, gameStartTimestamp, gameId, gameVersion, gameType, matchId, platformId,
             winner, []);
@@ -378,11 +344,8 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<List<Game>> GetGamesAsync()
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "SELECT * FROM gamesview";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT * FROM gamesview";
+        var command = databaseConnection.CreateCommand(query);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return [];
@@ -391,16 +354,16 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         while (await reader.ReadAsync())
         {
-            var gameId = reader.GetInt64("GameId");
+            var gameId = reader.GetInt64(reader.GetOrdinal("GameId"));
             if (!games.ContainsKey(gameId))
             {
-                var gameDuration = reader.GetInt32("GameDuration");
-                var gameStartTimestamp = reader.GetInt64("GameStartTimestamp");
-                var gameVersion = reader.GetString("GameVersion");
-                var gameType = Enum.Parse<GameType>(reader.GetString("GameType"));
-                var matchId = reader.GetString("MatchId");
-                var platformId = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
-                var winner = Enum.Parse<Team>(reader.GetInt32("Winner").ToString());
+                var gameDuration = reader.GetInt32(reader.GetOrdinal("GameDuration"));
+                var gameStartTimestamp = reader.GetInt64(reader.GetOrdinal("GameStartTimestamp"));
+                var gameVersion = reader.GetString(reader.GetOrdinal("GameVersion"));
+                var gameType = Enum.Parse<GameType>(reader.GetString(reader.GetOrdinal("GameType")));
+                var matchId = reader.GetString(reader.GetOrdinal("MatchId"));
+                var platformId = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
+                var winner = Enum.Parse<Team>(reader.GetInt32(reader.GetOrdinal("Winner")).ToString());
 
                 games[gameId] = new Game(gameDuration, gameStartTimestamp, gameId, gameVersion, gameType, matchId,
                     platformId,
@@ -415,19 +378,16 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<ConcurrentDictionary<PlatformRoute, ConcurrentBag<string>>> GetMatchIdsAsync()
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "SELECT MatchId, PlatformId FROM Games";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT MatchId, PlatformId FROM Games";
+        var command = databaseConnection.CreateCommand(query);
 
         await using var reader = await command.ExecuteReaderAsync();
         ConcurrentDictionary<PlatformRoute, ConcurrentBag<string>> matchIds = new();
 
         while (await reader.ReadAsync())
         {
-            var id = reader.GetString("MatchId");
-            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            var id = reader.GetString(reader.GetOrdinal("MatchId"));
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
             if (!matchIds.ContainsKey(platform)) matchIds[platform] = [];
             matchIds[platform].Add(id);
         }
@@ -437,19 +397,15 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<Player?> GetPlayerAsync(string summonerPuuid)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query =
-            "SELECT S.*, Champion FROM Players P JOIN Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = @SummonerPuuid";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT S.*, Champion FROM Players P JOIN Summoners S on P.SummonerPuuid = S.Puuid WHERE SummonerPuuid = @SummonerPuuid";
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@SummonerPuuid", summonerPuuid);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return null;
 
         await reader.ReadAsync();
-        var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
+        var champion = Enum.Parse<Champion>(reader.GetInt32(reader.GetOrdinal("Champion")).ToString());
         var summoner = CreateSummonerFromReader(reader);
 
         return new Player(summoner, champion);
@@ -457,14 +413,10 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<Summoner?> GetSummonerAsync(string summonerPuuid)
     {
-        await using var connection = databaseConnection.GetConnection();
-
-        connection.Open();
-
-        var query = "SELECT * FROM Summoners WHERE Puuid = @Puuid";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT * FROM Summoners WHERE Puuid = @Puuid";
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@Puuid", summonerPuuid);
-        await using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
 
         if (!reader.HasRows) return null;
 
@@ -475,12 +427,8 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<IDictionary<PlatformRoute, IList<(string, long)>>> GetPlayerPuuidsLastGameStartTimestampAsync()
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query =
-            "SELECT * FROM lastgamestarttimestampbyplayerPuuids LGSTP WHERE PlatformId = 'KR' LIMIT 150";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT * FROM lastgamestarttimestampbyplayerPuuids LGSTP WHERE PlatformId = 'KR' LIMIT 150";
+        var command = databaseConnection.CreateCommand(query);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return new Dictionary<PlatformRoute, IList<(string, long)>>();
@@ -489,11 +437,11 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         while (await reader.ReadAsync())
         {
-            var puuid = reader.GetString("SummonerPuuid");
+            var puuid = reader.GetString(reader.GetOrdinal("SummonerPuuid"));
             var lastGameStartTimestamp = reader.IsDBNull(reader.GetOrdinal("LastGameStartTimestamp"))
                 ? 0
-                : reader.GetInt64("LastGameStartTimestamp");
-            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+                : reader.GetInt64(reader.GetOrdinal("LastGameStartTimestamp"));
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
 
             if (!players.TryGetValue(platform, out var value))
             {
@@ -509,12 +457,10 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<ConcurrentDictionary<PlatformRoute, ConcurrentBag<Player>>> GetPlayersAsync()
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
+        var connection = await databaseConnection.GetOpenConnectionAsync();
 
-        var query =
-            "SELECT * FROM Players P JOIN Summoners S on P.SummonerPuuid = S.Puuid";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT * FROM Players P JOIN Summoners S on P.SummonerPuuid = S.Puuid";
+        var command = databaseConnection.CreateCommand(query);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!reader.HasRows) return [];
@@ -523,10 +469,15 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
         while (await reader.ReadAsync())
         {
-            var champion = Enum.Parse<Champion>(reader.GetInt32("Champion").ToString());
+            var champion = Enum.Parse<Champion>(reader.GetInt32(reader.GetOrdinal("Champion")).ToString());
             var summoner = CreateSummonerFromReader(reader);
 
-            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
+
+            if (!players.ContainsKey(platform))
+            {
+                players[platform] = [];
+            }
 
             players[platform].Add(new Player(summoner, champion));
         }
@@ -536,11 +487,8 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<List<(Summoner, PlatformRoute)>> GetSummonersAsync()
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "SELECT * FROM Summoners";
-        await using var command = new MySqlCommand(query, connection);
+        const string query = "SELECT * FROM Summoners";
+        var command = databaseConnection.CreateCommand(query);
 
         await using var reader = await command.ExecuteReaderAsync();
 
@@ -550,7 +498,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         while (await reader.ReadAsync())
         {
             var summoner = CreateSummonerFromReader(reader);
-            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
 
             summoners.Add((summoner, platform));
         }
@@ -562,22 +510,22 @@ public class DatabaseService(DatabaseConnection databaseConnection)
     {
         var matchIds = new List<(string, PlatformRoute)>();
 
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
+        const string query = """
 
-        var query = @"
-        SELECT MatchId, PlatformId
-        FROM Games G
-        LEFT JOIN Participants P ON P.GameId = G.GameId
-        GROUP BY MatchId, PlatformId
-        HAVING COUNT(DISTINCT P.SummonerPuuid) != 10";
+                                     SELECT MatchId, PlatformId
+                                     FROM Games G
+                                     LEFT JOIN Participants P ON P.GameId = G.GameId
+                                     GROUP BY MatchId, PlatformId
+                                     HAVING COUNT(DISTINCT P.SummonerPuuid) != 10
+                             """;
 
-        await using var command = new MySqlCommand(query, connection);
+        var command = databaseConnection.CreateCommand(query);
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            matchIds.Add((reader.GetString("MatchId"), Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"))));
+            matchIds.Add((reader.GetString(reader.GetOrdinal("MatchId")),
+                Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")))));
         }
 
         return matchIds;
@@ -587,24 +535,33 @@ public class DatabaseService(DatabaseConnection databaseConnection)
     {
         return new Summoner
         {
-            SummonerLevel = reader.IsDBNull(reader.GetOrdinal("Level")) ? 0 : reader.GetInt32("Level"),
-            Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString("Id"),
-            RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate")) ? 0 : reader.GetInt64("RevisionDate"),
-            Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid")) ? string.Empty : reader.GetString("Puuid"),
-            ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId")) ? 0 : reader.GetInt32("ProfileIconId"),
-            AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId")) ? string.Empty : reader.GetString("AccountId")
+            SummonerLevel = reader.IsDBNull(reader.GetOrdinal("Level"))
+                ? 0
+                : reader.GetInt32(reader.GetOrdinal("Level")),
+            Id = reader.IsDBNull(reader.GetOrdinal("Id")) ? string.Empty : reader.GetString(reader.GetOrdinal("Id")),
+            RevisionDate = reader.IsDBNull(reader.GetOrdinal("RevisionDate"))
+                ? 0
+                : reader.GetInt64(reader.GetOrdinal("RevisionDate")),
+            Puuid = reader.IsDBNull(reader.GetOrdinal("Puuid"))
+                ? string.Empty
+                : reader.GetString(reader.GetOrdinal("Puuid")),
+            ProfileIconId = reader.IsDBNull(reader.GetOrdinal("ProfileIconId"))
+                ? 0
+                : reader.GetInt32(reader.GetOrdinal("ProfileIconId")),
+            AccountId = reader.IsDBNull(reader.GetOrdinal("AccountId"))
+                ? string.Empty
+                : reader.GetString(reader.GetOrdinal("AccountId"))
         };
     }
 
     public async Task<int> UpdateAccountAsync(Account oldAccount, Account newAccount)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
+        var connection = await databaseConnection.GetOpenConnectionAsync();
 
         var query =
             "UPDATE Summoners SET GameName = @NewGameName, TagLine = @NewTagLine, Puuid = @NewPuuid WHERE Puuid = @OldPuuid";
 
-        await using var command = new MySqlCommand(query, connection);
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@NewGameName", newAccount.GameName);
         command.Parameters.AddWithValue("@NewTagLine", newAccount.TagLine);
         command.Parameters.AddWithValue("@NewPuuid", newAccount.Puuid);
@@ -615,11 +572,8 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<int> DeleteSummonerAsync(string summonerPuuid)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
         var query = "DELETE FROM Summoners WHERE Puuid = @Puuid";
-        await using var command = new MySqlCommand(query, connection);
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@Puuid", summonerPuuid);
 
         return await command.ExecuteNonQueryAsync();
@@ -627,23 +581,20 @@ public class DatabaseService(DatabaseConnection databaseConnection)
 
     public async Task<int> DeleteGameAsync(string matchId)
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
         var query = "DELETE FROM Games WHERE MatchId = @MatchId";
-        await using var command = new MySqlCommand(query, connection);
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@MatchId", matchId);
 
         return await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<ConcurrentBag<(PlatformRoute, Summoner)>> GetSummonersByLastUpdateTimeASync(DateTime lastUpdateTime)
+    public async Task<ConcurrentBag<(PlatformRoute, Summoner)>> GetSummonersByLastUpdateTimeASync(
+        DateTime lastUpdateTime
+        )
     {
-        await using var connection = databaseConnection.GetConnection();
-        await connection.OpenAsync();
-
-        var query = "SELECT * FROM Summoners WHERE lastUpdate IS NULL OR lastUpdate < @LastUpdateTime ORDER BY lastUpdate DESC";
-        await using var command = new MySqlCommand(query, connection);
+        var query =
+            "SELECT * FROM Summoners WHERE lastUpdate IS NULL OR lastUpdate < @LastUpdateTime ORDER BY lastUpdate DESC";
+        var command = databaseConnection.CreateCommand(query);
         command.Parameters.AddWithValue("@LastUpdateTime", lastUpdateTime);
 
         await using var reader = await command.ExecuteReaderAsync();
@@ -654,7 +605,7 @@ public class DatabaseService(DatabaseConnection databaseConnection)
         while (await reader.ReadAsync())
         {
             var summoner = CreateSummonerFromReader(reader);
-            var platform = Enum.Parse<PlatformRoute>(reader.GetString("PlatformId"));
+            var platform = Enum.Parse<PlatformRoute>(reader.GetString(reader.GetOrdinal("PlatformId")));
             summoners.Add((platform, summoner));
         }
 
