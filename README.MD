@@ -35,32 +35,20 @@ Although currently backend-only, OTPBUILD lays the foundation for a future web i
 ## 📁 Project Structure
 
 ```
-.
-├── Configurations
-│   └── DatabaseConfig.cs
-├── Models
-│   ├── DatabaseConnection.cs
-│   ├── Game.cs
-│   ├── GameParticipant.cs
-│   └── Player.cs
-└── Services
-    ├── DatabaseService.cs
-    ├── FetchOtps.cs
-    └── GameFetcher.cs
+src
+    ├── Clients
+    │       └── RiotApiClient.cs
+    ├── Configurations
+    │       └── DatabaseConfig.cs
+    ├── Models
+    │       ├── DatabaseConnection.cs
+    │       ├── Game.cs
+    │       ├── GameParticipant.cs
+    │       ├── ItemEvent.cs
+    │       └── Player.cs
+    └── Services
+            └── DatabaseService.cs
 ```
-
-
----
-
-## 🔒 API Usage & Rate Limiting
-
-OTPBUILD is optimized to respect Riot API rate limits:
-- Game data is cached locally in MySQL and only refreshed periodically
-- Match selection is limited to OTPs in Master+ tiers
-
-Example rate usage:  
-`20 requests every 1 second`  
-`100 requests every 2 minutes` (current production key limits)
 
 ---
 
