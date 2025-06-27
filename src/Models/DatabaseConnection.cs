@@ -36,7 +36,6 @@ public class DatabaseConnection(DatabaseConfig config) : IDisposable, IAsyncDisp
         command.CommandType = CommandType.Text;
         return command;
     }
-
     public NpgsqlCommand CreateStoredProcedure(string procedureName)
     {
         if (_connection == null)
@@ -45,7 +44,8 @@ public class DatabaseConnection(DatabaseConfig config) : IDisposable, IAsyncDisp
         }
 
         var command = _connection.CreateCommand();
-        command.CommandText = $"CALL {procedureName}";
+        command.CommandText = procedureName;
+        command.CommandType = CommandType.StoredProcedure;
         return command;
     }
 
