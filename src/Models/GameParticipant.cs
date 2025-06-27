@@ -27,6 +27,8 @@ public class GameParticipant
     public (int, int) SummonerSpells { get; }
     public Perks Perks { get; }
 
+    public ICollection<ItemEvent>? ItemEvents { get; set; }
+
     public GameParticipant(Participant participant)
     {
         Champion = participant.ChampionId;
@@ -53,10 +55,16 @@ public class GameParticipant
         RiotIdTagline = participant.RiotIdTagline;
     }
 
+    public GameParticipant(Participant participant, ICollection<ItemEvent> itemEvents)
+        : this(participant)
+    {
+        ItemEvents = itemEvents;
+    }
+
     public GameParticipant(
         string summonerName, string summonerId, long summonerLevel, string puuid, Champion champion, Team teamId,
         string teamPosition, int kills, int deaths, int assists, List<int> items, List<int> spellsCasts,
-        (int, int) summonerSpells, Perks perks, string riotIdGameName, string riotIdTagline
+        (int, int) summonerSpells, Perks perks, string riotIdGameName, string riotIdTagline, ICollection<ItemEvent>? itemEvents = null
         )
     {
         SummonerName = summonerName;
@@ -75,6 +83,8 @@ public class GameParticipant
         Perks = perks;
         RiotIdTagline = riotIdTagline;
         RiotIdGameName = riotIdGameName;
+
+        ItemEvents = itemEvents;
     }
 
     public override string ToString()
