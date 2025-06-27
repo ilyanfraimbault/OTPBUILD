@@ -34,6 +34,94 @@ public class Game
         Participants = match.Info.Participants.Select(participant => new GameParticipant(participant)).ToList();
     }
 
+    public Game(Game game)
+    {
+        GameDuration = game.GameDuration;
+        GameStartTimestamp = game.GameStartTimestamp;
+        GameId = game.GameId;
+        GameVersion = game.GameVersion;
+        GameType = game.GameType;
+
+        MatchId = game.MatchId;
+        PlatformRoute = game.PlatformRoute;
+
+        Winner = game.Winner;
+        Participants = new List<GameParticipant>(game.Participants);
+    }
+
+    public Game(Match match, Timeline timeline) : this(match)
+    {
+        var participantIdToPuuid = new Dictionary<int, string>();
+
+        foreach (var participant in match.Info.Participants)
+            participantIdToPuuid[participant.ParticipantId] = participant.Puuid;
+
+        foreach (var frameTimeLine in timeline.Info.Frames)
+        {
+            foreach (var eventsTimeLine in frameTimeLine.Events)
+            {
+                if ((eventsTimeLine.Type is not ("ITEM_PURCHASED" or "ITEM_SOLD" or "ITEM_DESTROYED")) ||
+                    eventsTimeLine is not { ParticipantId: not null, ItemId: not null }) continue;
+
+                var itemEvent = new ItemEvent(
+                    participantIdToPuuid[eventsTimeLine.ParticipantId.Value], eventsTimeLine.Type,
+                    (int)eventsTimeLine.ItemId, eventsTimeLine.Timestamp);
+
+                var participant = Participants.FirstOrDefault(p => p.Puuid == itemEvent.Puuid);
+
+                if (participant != null)
+                {
+                    participant.ItemEvents ??= new List<ItemEvent>();
+                    participant.ItemEvents.Add(itemEvent);
+                }
+            }
+        }
+    }
+
+    public Game(Game game, Timeline timeline) : this(game)
+    {
+        var gameParticipants = new Dictionary<int, GameParticipant>();
+        foreach (var participantTime in timeline.Info.Participants)
+        {
+            try
+            {
+                var participant = game.Participants.First(p => p.Puuid == participantTime.Puuid);
+                if (participant != null)
+                {
+                    gameParticipants[participantTime.ParticipantId] = participant;
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"Error while mapping participants from timeline to game participants. {participantTime.Puuid} : {game.GameId}", e);
+            }
+        }
+
+
+        foreach (var frameTimeLine in timeline.Info.Frames)
+        {
+            foreach (var eventsTimeLine in frameTimeLine.Events)
+            {
+                if (eventsTimeLine.Type is not ("ITEM_PURCHASED" or "ITEM_SOLD" or "ITEM_DESTROYED") ||
+                    eventsTimeLine is not { ParticipantId: not null, ItemId: not null }) continue;
+
+                if (eventsTimeLine.ParticipantId.Value < 0 ||
+                    eventsTimeLine.ParticipantId.Value >= timeline.Info.Participants.Length)
+                    continue;
+
+                var itemEvent = new ItemEvent(
+                    timeline.Info.Participants[eventsTimeLine.ParticipantId.Value].Puuid, eventsTimeLine.Type,
+                    (int)eventsTimeLine.ItemId, eventsTimeLine.Timestamp);
+
+                var participant = gameParticipants[eventsTimeLine.ParticipantId.Value];
+
+                if (participant == null) continue;
+                participant.ItemEvents ??= new List<ItemEvent>();
+                participant.ItemEvents.Add(itemEvent);
+            }
+        }
+    }
+
     public Game(
         long gameDuration, long gameStartTimestamp, long gameId, string gameVersion, GameType gameType, string matchId,
         PlatformRoute platformRoute, Team winner, List<GameParticipant> participants
@@ -54,10 +142,5 @@ public class Game
     {
         var options = new JsonSerializerOptions { WriteIndented = true };
         return JsonSerializer.Serialize(this, options);
-    }
-
-    public bool IsPlayingChampion(Champion champion, string summonerId)
-    {
-        return Participants.Any(participant => participant.Champion == champion && participant.SummonerId == summonerId);
     }
 }
